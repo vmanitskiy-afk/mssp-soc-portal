@@ -297,6 +297,50 @@ class RuSIEMClient:
             "updated_at": raw.get("updated_at"),
         }
 
+    @staticmethod
+    def map_incident_preview(incident: dict, fullinfo: dict) -> dict:
+        """Build preview for publish form.
+
+        Combines data from GET /incidents/{id} and GET /incidents/{id}/fullinfo.
+        Maps RuSIEM fields to portal fields that auto-fill the publish form.
+
+        Fields extracted from fullinfo meta_values:
+        - IP источника событий → event_source_ips
+        - Имя хоста-источника событий → source_hostnames
+        - Исходный IP адрес → source_ips
+        - Категория симптома → symptoms
+        """
+        priority_num = incident.get("priority", 4)
+        meta = fullinfo.get("meta_values", {})
+
+        # Extract lists from meta_values
+        # RuSIEM returns: {"field_name": [{"value": "10.1.1.1", "count": 5}, ...]}
+        def extract_values(field_data) -> list[str]:
+            if isinstance(field_data, list):
+                return [item.get("value", str(item)) if isinstance(item, dict) else str(item) for item in field_data]
+            return []
+
+        return {
+            "rusiem_incident_id": incident["id"],
+            "title": incident.get("name", ""),
+            "description": incident.get("description", ""),
+            "priority": RUSIEM_PRIORITY_MAP.get(priority_num, "low"),
+            "priority_num": priority_num,
+            "category": meta.get("symptom_category", [{}])[0].get("value") if meta.get("symptom_category") else None,
+            "mitre_id": incident.get("mitre_technique"),
+            "source_ips": extract_values(meta.get("src_ip", [])),
+            "source_hostnames": extract_values(meta.get("event_source_hostname", [])),
+            "event_source_ips": extract_values(meta.get("event_source_ip", [])),
+            "event_count": incident.get("count_events", 0),
+            "symptoms": extract_values(meta.get("symptom_name", [])),
+            "rusiem_status": incident.get("status", "assigned"),
+            "created_at": incident.get("created_at"),
+            "rusiem_raw_data": {
+                "incident": incident,
+                "fullinfo": fullinfo,
+            },
+        }
+
 
 # ── Exceptions ────────────────────────────────────────────────────
 

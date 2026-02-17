@@ -69,11 +69,15 @@ def verify_mfa_code(secret: str, code: str) -> bool:
 class CurrentUser:
     """Extracted from JWT token."""
 
-    def __init__(self, user_id: str, tenant_id: str, role: str, email: str):
+    def __init__(self, user_id: str, tenant_id: str | None, role: str, email: str):
         self.user_id = user_id
-        self.tenant_id = tenant_id
+        self.tenant_id = tenant_id  # None for SOC staff
         self.role = role
         self.email = email
+
+    @property
+    def is_soc_staff(self) -> bool:
+        return self.role in ("soc_admin", "soc_analyst")
 
 
 async def get_current_user(
