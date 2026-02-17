@@ -36,3 +36,7 @@ Thumbs.db
 # Reports (generated)
 reports_output/
 tsconfig.tsbuildinfo
+-e 
+.env.production
+certbot/
+backups/
