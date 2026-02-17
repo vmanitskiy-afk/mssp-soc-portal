@@ -1,24 +1,27 @@
 """
-Client-facing incident endpoints.
+Client-facing incident endpoints — real implementation.
 
-Clients can:
-- View incidents published to their organization
-- Read recommendations and SOC actions
-- Add comments describing their response actions
-- Change incident status (e.g., mark as resolved/closed)
-- Add their response description
+All endpoints are tenant-scoped: client only sees their own incidents.
+Tenant ID comes from JWT automatically.
+
+/api/incidents/              — list incidents
+/api/incidents/{id}          — detail with full card
+/api/incidents/{id}/comments — add comment
+/api/incidents/{id}/status   — change status
+/api/incidents/{id}/response — update client response text
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import CurrentUser, RoleRequired, get_current_user
+from app.core.dependencies import get_db
+from app.core.security import CurrentUser, RoleRequired
+from app.services.incident_service import IncidentService, IncidentServiceError
 
 router = APIRouter()
 
-# Client roles that can view incidents
 client_viewer = RoleRequired("client_admin", "client_security", "client_auditor", "client_readonly")
-# Client roles that can modify incidents
 client_editor = RoleRequired("client_admin", "client_security")
 
 
@@ -29,12 +32,11 @@ class AddCommentRequest(BaseModel):
 
 
 class ChangeStatusRequest(BaseModel):
-    status: str  # in_progress, awaiting_soc, resolved, closed
-    comment: str | None = None  # Optional reason for status change
+    status: str
+    comment: str | None = None
 
 
 class ClientResponseRequest(BaseModel):
-    """Client describes what they did in response to the incident."""
     client_response: str
 
 
@@ -49,100 +51,132 @@ async def list_incidents(
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     user: CurrentUser = Depends(client_viewer),
+    db: AsyncSession = Depends(get_db),
 ):
-    """List incidents published to the client's organization.
+    """List incidents for the client's organization."""
+    if not user.tenant_id:
+        raise HTTPException(status_code=403, detail="No tenant assigned")
 
-    Filtered by tenant_id from JWT automatically (RLS).
-    Status values: new, in_progress, awaiting_customer, awaiting_soc, resolved, closed
-    Priority values: critical, high, medium, low
-    """
-    # TODO: Query published_incidents WHERE tenant_id = user.tenant_id
-    return {"items": [], "total": 0, "page": page, "pages": 0}
+    service = IncidentService(db)
+    return await service.list_incidents(
+        tenant_id=user.tenant_id,
+        status=status,
+        priority=priority,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        per_page=per_page,
+    )
 
 
-# ── Get incident detail ──────────────────────────────────────────
+# ── Incident detail ──────────────────────────────────────────────
 
 @router.get("/{incident_id}")
 async def get_incident(
     incident_id: str = Path(...),
     user: CurrentUser = Depends(client_viewer),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get full incident detail including:
-    - Auto-populated fields from RuSIEM (title, description, IPs, etc.)
-    - SOC recommendations
-    - SOC actions taken
-    - Client response
-    - Comment thread (SOC + client)
-    - Status change history (timeline)
-    """
-    # TODO: Fetch PublishedIncident with comments and status_history
-    # Verify tenant_id matches user's tenant
-    return {}
+    """Get full incident card with recommendations, comments, timeline."""
+    if not user.tenant_id:
+        raise HTTPException(status_code=403, detail="No tenant assigned")
+
+    service = IncidentService(db)
+    try:
+        return await service.get_incident_detail(incident_id, tenant_id=user.tenant_id)
+    except IncidentServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
-# ── Add client comment ────────────────────────────────────────────
+# ── Add comment ───────────────────────────────────────────────────
 
 @router.post("/{incident_id}/comments")
 async def add_comment(
     body: AddCommentRequest,
     incident_id: str = Path(...),
     user: CurrentUser = Depends(client_editor),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Add a comment from the client side (is_soc=False).
+    """Add a comment from the client side.
 
-    Clients use comments to:
-    - Describe actions taken in response
-    - Ask clarifying questions to SOC
-    - Provide additional context
+    Used to describe response actions, ask questions, provide context.
     """
-    # TODO: Create IncidentComment with is_soc=False
-    # Notify SOC analysts about new comment
-    return {"id": "", "text": body.text, "is_soc": False, "created_at": ""}
+    if not user.tenant_id:
+        raise HTTPException(status_code=403, detail="No tenant assigned")
+
+    service = IncidentService(db)
+    try:
+        comment = await service.add_comment(
+            incident_id=incident_id,
+            user_id=user.user_id,
+            text=body.text,
+            is_soc=False,
+            tenant_id=user.tenant_id,
+        )
+    except IncidentServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    return {"id": str(comment.id), "text": comment.text, "is_soc": False}
 
 
-# ── Change incident status ────────────────────────────────────────
+# ── Change status ─────────────────────────────────────────────────
 
 @router.put("/{incident_id}/status")
 async def change_status(
     body: ChangeStatusRequest,
     incident_id: str = Path(...),
     user: CurrentUser = Depends(client_editor),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Change incident status.
+    """Change incident status from client side.
 
-    Allowed client transitions:
-    - new → in_progress          (client acknowledged)
-    - in_progress → awaiting_soc (client needs SOC help)
-    - in_progress → resolved     (client finished response)
-    - awaiting_customer → in_progress (client resumes work)
-    - resolved → closed          (confirmed resolved)
-
-    Each change is logged to incident_status_changes for audit trail.
+    Allowed transitions:
+    - new → in_progress          (acknowledged)
+    - in_progress → awaiting_soc (need SOC help)
+    - in_progress → resolved     (response complete)
+    - awaiting_customer → in_progress (resume work)
+    - resolved → closed          (confirmed closed)
     """
-    # TODO: Validate transition, update status, create IncidentStatusChange
-    # If status -> closed: set closed_by and closed_at
-    # Notify SOC about status change
-    allowed_transitions = {
-        "new": ["in_progress"],
-        "in_progress": ["awaiting_soc", "resolved"],
-        "awaiting_customer": ["in_progress"],
-        "resolved": ["closed"],
-    }
-    return {"ok": True}
+    if not user.tenant_id:
+        raise HTTPException(status_code=403, detail="No tenant assigned")
+
+    service = IncidentService(db)
+    try:
+        incident = await service.change_status(
+            incident_id=incident_id,
+            new_status=body.status,
+            user_id=user.user_id,
+            is_soc=False,
+            comment=body.comment,
+            tenant_id=user.tenant_id,
+        )
+    except IncidentServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    return {"ok": True, "status": incident.status}
 
 
 # ── Update client response ────────────────────────────────────────
 
 @router.put("/{incident_id}/response")
-async def update_client_response(
+async def update_response(
     body: ClientResponseRequest,
     incident_id: str = Path(...),
     user: CurrentUser = Depends(client_editor),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Update the client's response description.
+    """Update structured client response — what was done in response."""
+    if not user.tenant_id:
+        raise HTTPException(status_code=403, detail="No tenant assigned")
 
-    Dedicated field for structured response: what was done,
-    what was the result. Separate from free-form comments.
-    """
-    # TODO: Update published_incidents.client_response
+    service = IncidentService(db)
+    try:
+        await service.update_client_response(
+            incident_id=incident_id,
+            client_response=body.client_response,
+            tenant_id=user.tenant_id,
+        )
+    except IncidentServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
     return {"ok": True}
