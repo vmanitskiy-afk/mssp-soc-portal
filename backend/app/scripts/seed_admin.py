@@ -42,12 +42,12 @@ async def create_admin():
         )
         db.add(user)
         await db.commit()
-        print(f"\nSOC Admin created:")
+        print("\nSOC Admin created:")
         print(f"  ID:    {user.id}")
         print(f"  Email: {email}")
-        print(f"  Role:  soc_admin")
-        print(f"\nLogin at /api/auth/login")
-        print(f"Then setup MFA at /api/auth/mfa/setup")
+        print("  Role:  soc_admin")
+        print("\nLogin at /api/auth/login")
+        print("Then setup MFA at /api/auth/mfa/setup")
 
 
 if __name__ == "__main__":

@@ -13,14 +13,14 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.integrations.rusiem.client import RuSIEMClient
 from app.models.models import (
     PublishedIncident, IncidentComment, IncidentStatusChange,
-    Notification, Tenant, User, AuditLog,
+    Notification, Tenant, AuditLog,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ class IncidentService:
         """
         # Verify tenant exists
         tenant = await self.db.execute(
-            select(Tenant).where(Tenant.id == tenant_id, Tenant.is_active == True)
+            select(Tenant).where(Tenant.id == tenant_id, Tenant.is_active == True)  # noqa: E712
         )
         tenant_obj = tenant.scalar_one_or_none()
         if not tenant_obj:

@@ -30,7 +30,7 @@ async def list_sources(
 
     result = await db.execute(
         select(LogSource)
-        .where(LogSource.tenant_id == user.tenant_id, LogSource.is_active == True)
+        .where(LogSource.tenant_id == user.tenant_id, LogSource.is_active == True)  # noqa: E712
         .order_by(LogSource.name)
     )
     sources = result.scalars().all()

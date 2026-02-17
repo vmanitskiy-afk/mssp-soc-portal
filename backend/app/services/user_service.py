@@ -107,7 +107,7 @@ class UserService:
         per_page: int = 25,
     ) -> dict:
         """List users with optional filters."""
-        query = select(User).where(User.is_active == True)
+        query = select(User).where(User.is_active == True)  # noqa: E712
 
         if tenant_id:
             query = query.where(User.tenant_id == tenant_id)

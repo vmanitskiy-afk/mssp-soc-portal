@@ -10,7 +10,7 @@ Aggregates metrics for the client dashboard:
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, func, case, and_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import PublishedIncident, LogSource, SlaSnapshot
@@ -140,7 +140,7 @@ class DashboardService:
                 func.count().filter(LogSource.status == "no_logs").label("no_logs"),
                 func.count().filter(LogSource.status == "error").label("error"),
             )
-            .where(LogSource.tenant_id == tenant_id, LogSource.is_active == True)
+            .where(LogSource.tenant_id == tenant_id, LogSource.is_active == True)  # noqa: E712
         )
         row = result.one()
 

@@ -53,8 +53,7 @@ def calculate_sla():
 
 
 async def _calculate_sla_async():
-    from sqlalchemy import select, func, and_
-    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy import select
     from app.core.database import AsyncSessionLocal
     from app.models.models import (
         Tenant, PublishedIncident, IncidentStatusChange, SlaSnapshot,
@@ -67,7 +66,7 @@ async def _calculate_sla_async():
     async with AsyncSessionLocal() as db:
         # Get all active tenants
         result = await db.execute(
-            select(Tenant).where(Tenant.is_active == True)
+            select(Tenant).where(Tenant.is_active == True)  # noqa: E712
         )
         tenants = result.scalars().all()
 

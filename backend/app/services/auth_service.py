@@ -7,7 +7,7 @@ Handles: login flow, MFA verification, token management, user lookup.
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import (
@@ -39,13 +39,13 @@ class AuthService:
 
     async def get_user_by_email(self, email: str) -> User | None:
         result = await self.db.execute(
-            select(User).where(User.email == email, User.is_active == True)
+            select(User).where(User.email == email, User.is_active == True)  # noqa: E712
         )
         return result.scalar_one_or_none()
 
     async def get_user_by_id(self, user_id: str) -> User | None:
         result = await self.db.execute(
-            select(User).where(User.id == user_id, User.is_active == True)
+            select(User).where(User.id == user_id, User.is_active == True)  # noqa: E712
         )
         return result.scalar_one_or_none()
 

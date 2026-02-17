@@ -30,7 +30,7 @@ async def unread_count(
     result = await db.execute(
         select(func.count()).where(
             Notification.tenant_id == user.tenant_id,
-            Notification.is_read == False,
+            Notification.is_read == False,  # noqa: E712
         )
     )
     return {"count": result.scalar() or 0}
@@ -109,7 +109,7 @@ async def mark_all_read(
 
     result = await db.execute(
         update(Notification)
-        .where(Notification.tenant_id == user.tenant_id, Notification.is_read == False)
+        .where(Notification.tenant_id == user.tenant_id, Notification.is_read == False)  # noqa: E712
         .values(is_read=True)
     )
     return {"ok": True, "updated": result.rowcount}

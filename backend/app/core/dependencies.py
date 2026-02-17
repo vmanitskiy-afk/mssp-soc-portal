@@ -7,15 +7,13 @@ Provides: database sessions, Redis client, RuSIEM client, current user with tena
 from typing import AsyncGenerator
 
 import redis.asyncio as aioredis
-from fastapi import Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal, set_tenant_context
 from app.core.security import CurrentUser, get_current_user
 from app.integrations.rusiem.client import RuSIEMClient
-from app.models.models import Tenant
 
 settings = get_settings()
 
