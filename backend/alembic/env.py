@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.core.database import Base
-from app.models.models import *  # noqa: F401,F403 - import all models for autogenerate
+
+# Import ALL models so Alembic sees them for autogenerate
+from app.models.models import (  # noqa: F401
+    Tenant, User, PublishedIncident, IncidentComment,
+    IncidentStatusChange, SlaSnapshot, LogSource,
+    AuditLog, Notification,
+)
 
 config = context.config
 settings = get_settings()

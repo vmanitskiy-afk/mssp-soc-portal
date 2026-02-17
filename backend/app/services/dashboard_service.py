@@ -1,0 +1,171 @@
+"""
+Dashboard service.
+
+Aggregates metrics for the client dashboard:
+- Incident counts by status and priority
+- SLA metrics (MTTA, MTTR, compliance)
+- Log source status summary
+"""
+
+import logging
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select, func, case, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.models import PublishedIncident, LogSource, SlaSnapshot
+
+logger = logging.getLogger(__name__)
+
+
+class DashboardService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get_summary(self, tenant_id: str) -> dict:
+        """Main dashboard summary: incidents, SLA, sources."""
+        incidents = await self._incident_stats(tenant_id)
+        sla = await self._latest_sla(tenant_id)
+        sources = await self._source_stats(tenant_id)
+
+        return {
+            "incidents": incidents,
+            "sla": sla,
+            "sources": sources,
+        }
+
+    async def get_incidents_chart(self, tenant_id: str, days: int = 7) -> list[dict]:
+        """Incidents by priority grouped by date for chart."""
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+
+        result = await self.db.execute(
+            select(
+                func.date(PublishedIncident.published_at).label("date"),
+                PublishedIncident.priority,
+                func.count().label("count"),
+            )
+            .where(
+                PublishedIncident.tenant_id == tenant_id,
+                PublishedIncident.published_at >= since,
+            )
+            .group_by(func.date(PublishedIncident.published_at), PublishedIncident.priority)
+            .order_by(func.date(PublishedIncident.published_at))
+        )
+        rows = result.all()
+
+        # Pivot: group by date, columns = priorities
+        chart = {}
+        for row in rows:
+            d = str(row.date)
+            if d not in chart:
+                chart[d] = {"date": d, "critical": 0, "high": 0, "medium": 0, "low": 0}
+            chart[d][row.priority] = row.count
+
+        return list(chart.values())
+
+    async def get_sla_metrics(self, tenant_id: str, days: int = 30) -> dict:
+        """SLA metrics for a period."""
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+
+        result = await self.db.execute(
+            select(SlaSnapshot)
+            .where(
+                SlaSnapshot.tenant_id == tenant_id,
+                SlaSnapshot.period_start >= since,
+            )
+            .order_by(SlaSnapshot.period_start.desc())
+            .limit(1)
+        )
+        snapshot = result.scalar_one_or_none()
+
+        if not snapshot:
+            return {"mtta_minutes": None, "mttr_minutes": None, "compliance_pct": None, "by_priority": {}}
+
+        return {
+            "mtta_minutes": snapshot.mtta_minutes,
+            "mttr_minutes": snapshot.mttr_minutes,
+            "compliance_pct": snapshot.sla_compliance_pct,
+            "by_priority": snapshot.incidents_by_priority or {},
+            "period_start": snapshot.period_start.isoformat() if snapshot.period_start else None,
+            "period_end": snapshot.period_end.isoformat() if snapshot.period_end else None,
+        }
+
+    # ── Private ───────────────────────────────────────────────────
+
+    async def _incident_stats(self, tenant_id: str) -> dict:
+        """Incident counts by status and priority."""
+        result = await self.db.execute(
+            select(
+                func.count().label("total"),
+                func.count().filter(PublishedIncident.status.notin_(["closed", "false_positive"])).label("open"),
+                func.count().filter(PublishedIncident.priority == "critical").label("critical"),
+                func.count().filter(PublishedIncident.priority == "high").label("high"),
+                func.count().filter(PublishedIncident.priority == "medium").label("medium"),
+                func.count().filter(PublishedIncident.priority == "low").label("low"),
+                func.count().filter(PublishedIncident.status == "new").label("new"),
+                func.count().filter(PublishedIncident.status == "in_progress").label("in_progress"),
+                func.count().filter(PublishedIncident.status == "awaiting_customer").label("awaiting_customer"),
+                func.count().filter(PublishedIncident.status == "resolved").label("resolved"),
+                func.count().filter(PublishedIncident.status == "closed").label("closed"),
+            )
+            .where(PublishedIncident.tenant_id == tenant_id)
+        )
+        row = result.one()
+
+        return {
+            "total": row.total,
+            "open": row.open,
+            "by_priority": {
+                "critical": row.critical,
+                "high": row.high,
+                "medium": row.medium,
+                "low": row.low,
+            },
+            "by_status": {
+                "new": row.new,
+                "in_progress": row.in_progress,
+                "awaiting_customer": row.awaiting_customer,
+                "resolved": row.resolved,
+                "closed": row.closed,
+            },
+        }
+
+    async def _source_stats(self, tenant_id: str) -> dict:
+        """Log source status summary."""
+        result = await self.db.execute(
+            select(
+                func.count().label("total"),
+                func.count().filter(LogSource.status == "active").label("active"),
+                func.count().filter(LogSource.status == "degraded").label("degraded"),
+                func.count().filter(LogSource.status == "no_logs").label("no_logs"),
+                func.count().filter(LogSource.status == "error").label("error"),
+            )
+            .where(LogSource.tenant_id == tenant_id, LogSource.is_active == True)
+        )
+        row = result.one()
+
+        return {
+            "total": row.total,
+            "active": row.active,
+            "degraded": row.degraded,
+            "no_logs": row.no_logs,
+            "error": row.error,
+        }
+
+    async def _latest_sla(self, tenant_id: str) -> dict:
+        result = await self.db.execute(
+            select(SlaSnapshot)
+            .where(SlaSnapshot.tenant_id == tenant_id)
+            .order_by(SlaSnapshot.period_end.desc())
+            .limit(1)
+        )
+        snapshot = result.scalar_one_or_none()
+
+        if not snapshot:
+            return {"mtta_minutes": None, "mttr_minutes": None, "compliance_pct": None}
+
+        return {
+            "mtta_minutes": snapshot.mtta_minutes,
+            "mttr_minutes": snapshot.mttr_minutes,
+            "compliance_pct": snapshot.sla_compliance_pct,
+        }
