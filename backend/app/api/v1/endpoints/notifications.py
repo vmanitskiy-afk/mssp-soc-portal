@@ -68,7 +68,7 @@ async def list_notifications(
                 "title": n.title,
                 "message": n.message,
                 "is_read": n.is_read,
-                "metadata": n.metadata,
+                "extra_data": n.extra_data,
                 "created_at": n.created_at.isoformat() if n.created_at else None,
             }
             for n in notifs

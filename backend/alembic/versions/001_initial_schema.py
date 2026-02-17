@@ -202,7 +202,7 @@ def upgrade() -> None:
         sa.Column("title", sa.String(255), nullable=False),
         sa.Column("message", sa.Text, nullable=False),
         sa.Column("is_read", sa.Boolean, server_default="false"),
-        sa.Column("metadata", postgresql.JSONB, nullable=True),
+        sa.Column("extra_data", postgresql.JSONB, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
     )
     op.create_index("ix_notif_tenant_user", "notifications", ["tenant_id", "user_id"])

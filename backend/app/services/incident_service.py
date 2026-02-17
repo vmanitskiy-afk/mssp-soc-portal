@@ -159,7 +159,7 @@ class IncidentService:
             type="new_incident",
             title=f"New {preview['priority']} incident: {preview['title'][:100]}",
             message=f"SOC published incident #{rusiem_incident_id}. Please review recommendations.",
-            metadata={"incident_id": str(incident.id), "priority": preview["priority"]},
+            extra_data={"incident_id": str(incident.id), "priority": preview["priority"]},
         ))
 
         # Audit
@@ -230,7 +230,7 @@ class IncidentService:
             type=notif_type,
             title=f"New comment on incident: {incident.title[:80]}",
             message=text[:200],
-            metadata={"incident_id": str(incident.id)},
+            extra_data={"incident_id": str(incident.id)},
         ))
 
         await self.db.flush()
@@ -285,7 +285,7 @@ class IncidentService:
             type="status_change",
             title=f"Incident status changed: {old_status} → {new_status}",
             message=comment or f"Incident '{incident.title[:80]}' status updated.",
-            metadata={
+            extra_data={
                 "incident_id": str(incident.id),
                 "old_status": old_status,
                 "new_status": new_status,

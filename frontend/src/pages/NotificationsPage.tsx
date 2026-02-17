@@ -49,7 +49,7 @@ export default function NotificationsPage() {
 
   const handleClick = (n: Notification) => {
     if (!n.is_read) markRead(n.id);
-    const incidentId = (n.metadata as any)?.incident_id;
+    const incidentId = (n.extra_data as any)?.incident_id;
     if (incidentId) navigate(`/incidents/${incidentId}`);
   };
 
