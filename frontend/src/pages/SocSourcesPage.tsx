@@ -352,8 +352,8 @@ export default function SocSourcesPage() {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="card w-full max-w-lg p-6 space-y-4 animate-in">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-8">
+          <div className="card w-full max-w-lg p-6 space-y-4 animate-in my-auto">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-surface-100">
                 {editingId ? 'Редактировать источник' : 'Добавить источник'}
