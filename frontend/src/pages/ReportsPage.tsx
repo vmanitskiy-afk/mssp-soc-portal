@@ -113,8 +113,9 @@ export default function ReportsPage() {
     if (!isSoc) return;
     api.get('/soc/tenants')
       .then(({ data }) => {
-        setTenants(data || []);
-        if (data && data.length > 0) setSelectedTenant(data[0].id);
+        const list = data?.items || data || [];
+        setTenants(list);
+        if (list.length > 0) setSelectedTenant(list[0].id);
       })
       .catch(() => {});
   }, [isSoc]);
