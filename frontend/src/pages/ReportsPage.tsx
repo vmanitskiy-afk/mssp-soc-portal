@@ -5,9 +5,11 @@ import {
 } from 'recharts';
 import {
   FileText, Download, Calendar, Loader2, TrendingUp, Clock,
-  Shield, BarChart3, FileSpreadsheet, ChevronDown,
+  Shield, BarChart3, FileSpreadsheet, ChevronDown, Building2,
 } from 'lucide-react';
 import api from '../services/api';
+import { useAuthStore } from '../store/auth';
+import type { Tenant } from '../types';
 
 interface SlaPoint {
   date: string;
@@ -67,9 +69,14 @@ function formatMinutes(min: number | null): string {
 }
 
 export default function ReportsPage() {
+  const { user } = useAuthStore();
+  const isSoc = user?.role?.startsWith('soc_');
+
   const [preset, setPreset] = useState('current_month');
   const [periodFrom, setPeriodFrom] = useState('');
   const [periodTo, setPeriodTo] = useState('');
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [selectedTenant, setSelectedTenant] = useState('');
   const [slaHistory, setSlaHistory] = useState<SlaPoint[]>([]);
   const [slaCurrent, setSlaCurrent] = useState<SlaCurrent | null>(null);
   const [loadingSla, setLoadingSla] = useState(true);
@@ -78,6 +85,16 @@ export default function ReportsPage() {
   const [loadingCsv, setLoadingCsv] = useState(false);
   const [error, setError] = useState('');
   const [showPresets, setShowPresets] = useState(false);
+
+  // Load tenants for SOC users
+  useEffect(() => {
+    if (isSoc) {
+      api.get('/soc/tenants').then(({ data }) => {
+        setTenants(data);
+        if (data.length > 0) setSelectedTenant(data[0].id);
+      }).catch(() => {});
+    }
+  }, [isSoc]);
 
   useEffect(() => {
     const dates = getPresetDates('current_month');
@@ -97,10 +114,12 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (!periodFrom) return;
+    if (isSoc && !selectedTenant) { setLoadingSla(false); return; }
     setLoadingSla(true);
+    const tenantParam = isSoc && selectedTenant ? `&tenant_id=${selectedTenant}` : '';
     Promise.all([
-      api.get('/dashboard/sla-history?period=90d'),
-      api.get('/dashboard/sla?period=30d'),
+      api.get(`/dashboard/sla-history?period=90d${tenantParam}`),
+      api.get(`/dashboard/sla?period=30d${tenantParam}`),
     ])
       .then(([hist, cur]) => {
         setSlaHistory(hist.data);
@@ -108,14 +127,16 @@ export default function ReportsPage() {
       })
       .catch(() => {})
       .finally(() => setLoadingSla(false));
-  }, [periodFrom]);
+  }, [periodFrom, selectedTenant, isSoc]);
+
+  const tenantParam = isSoc && selectedTenant ? selectedTenant : undefined;
 
   async function downloadMonthlyPdf() {
     setLoadingPdf(true);
     setError('');
     try {
       const resp = await api.get('/reports/monthly', {
-        params: { period_from: periodFrom, period_to: periodTo },
+        params: { period_from: periodFrom, period_to: periodTo, tenant_id: tenantParam },
         responseType: 'blob',
       });
       downloadBlob(resp.data, `soc_report_${periodFrom}_${periodTo}.pdf`);
@@ -131,7 +152,7 @@ export default function ReportsPage() {
     setError('');
     try {
       const resp = await api.get('/reports/sla-pdf', {
-        params: { period_from: periodFrom, period_to: periodTo },
+        params: { period_from: periodFrom, period_to: periodTo, tenant_id: tenantParam },
         responseType: 'blob',
       });
       downloadBlob(resp.data, `sla_report_${periodFrom}_${periodTo}.pdf`);
@@ -147,7 +168,7 @@ export default function ReportsPage() {
     setError('');
     try {
       const resp = await api.get('/reports/csv', {
-        params: { period_from: periodFrom, period_to: periodTo },
+        params: { period_from: periodFrom, period_to: periodTo, tenant_id: tenantParam },
         responseType: 'blob',
       });
       downloadBlob(resp.data, `incidents_${periodFrom}_${periodTo}.csv`);
@@ -178,6 +199,21 @@ export default function ReportsPage() {
       {/* Period selector */}
       <div className="card p-4">
         <div className="flex items-center gap-4 flex-wrap">
+          {isSoc && (
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-surface-500" />
+              <select
+                value={selectedTenant}
+                onChange={(e) => setSelectedTenant(e.target.value)}
+                className="input text-sm w-56"
+              >
+                <option value="">{'\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043A\u043B\u0438\u0435\u043D\u0442\u0430'}</option>
+                {tenants.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="relative">
             <button
               onClick={() => setShowPresets(!showPresets)}

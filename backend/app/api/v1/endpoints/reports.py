@@ -24,22 +24,30 @@ from app.services.report_service import ReportService, ReportServiceError
 router = APIRouter()
 
 
+def _resolve_tenant(user: CurrentUser, tenant_id: str | None) -> str | None:
+    """SOC users can specify tenant_id; clients use their own."""
+    if user.role in ("soc_admin", "soc_analyst"):
+        return tenant_id
+    return user.tenant_id
+
+
 @router.get("/monthly")
 async def monthly_report(
     period_from: str = Query(..., description="Start date YYYY-MM-DD"),
     period_to: str = Query(..., description="End date YYYY-MM-DD"),
+    tenant_id: str | None = Query(None),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate and download monthly SOC report PDF."""
-    tenant_id = user.tenant_id
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Нет привязки к клиенту")
+    tid = _resolve_tenant(user, tenant_id)
+    if not tid:
+        raise HTTPException(status_code=400, detail="Выберите клиента")
 
     service = ReportService(db)
     try:
         pdf_bytes = await service.generate_monthly_report(
-            tenant_id, period_from, period_to
+            tid, period_from, period_to
         )
     except ReportServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
@@ -56,18 +64,19 @@ async def monthly_report(
 async def sla_report_pdf(
     period_from: str = Query(..., description="Start date YYYY-MM-DD"),
     period_to: str = Query(..., description="End date YYYY-MM-DD"),
+    tenant_id: str | None = Query(None),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate SLA report PDF with metrics and trends."""
-    tenant_id = user.tenant_id
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Нет привязки к клиенту")
+    tid = _resolve_tenant(user, tenant_id)
+    if not tid:
+        raise HTTPException(status_code=400, detail="Выберите клиента")
 
     service = ReportService(db)
     try:
         pdf_bytes = await service.generate_sla_report(
-            tenant_id, period_from, period_to
+            tid, period_from, period_to
         )
     except ReportServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
@@ -84,13 +93,14 @@ async def sla_report_pdf(
 async def incidents_csv(
     period_from: str = Query(..., description="Start date YYYY-MM-DD"),
     period_to: str = Query(..., description="End date YYYY-MM-DD"),
+    tenant_id: str | None = Query(None),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Download incidents as CSV."""
-    tenant_id = user.tenant_id
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Нет привязки к клиенту")
+    tid = _resolve_tenant(user, tenant_id)
+    if not tid:
+        raise HTTPException(status_code=400, detail="Выберите клиента")
 
     try:
         dt_from = datetime.fromisoformat(period_from).replace(tzinfo=timezone.utc)
@@ -103,7 +113,7 @@ async def incidents_csv(
     result = await db.execute(
         select(PublishedIncident)
         .where(
-            PublishedIncident.tenant_id == tenant_id,
+            PublishedIncident.tenant_id == tid,
             PublishedIncident.published_at >= dt_from,
             PublishedIncident.published_at <= dt_to,
         )
@@ -145,17 +155,18 @@ async def incidents_csv(
 @router.get("/incident/{incident_id}")
 async def incident_report(
     incident_id: str,
+    tenant_id: str | None = Query(None),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate and download single incident report PDF."""
-    tenant_id = user.tenant_id
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="Нет привязки к клиенту")
+    tid = _resolve_tenant(user, tenant_id)
+    if not tid:
+        raise HTTPException(status_code=400, detail="Выберите клиента")
 
     service = ReportService(db)
     try:
-        pdf_bytes = await service.generate_incident_report(tenant_id, incident_id)
+        pdf_bytes = await service.generate_incident_report(tid, incident_id)
     except ReportServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
