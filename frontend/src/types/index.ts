@@ -83,12 +83,29 @@ export interface IncidentDetail {
   recommendations: string | null;
   soc_actions: string | null;
   client_response: string | null;
+  ioc_indicators: IOCIndicator[];
+  affected_assets: AffectedAsset[];
+  acknowledged_at: string | null;
+  acknowledged_by_name: string | null;
   published_by_name: string;
   published_at: string;
   closed_by_name: string | null;
   closed_at: string | null;
   comments: IncidentComment[];
   status_history: StatusChange[];
+}
+
+export interface IOCIndicator {
+  type: string;   // ip, domain, hash, url, email
+  value: string;
+  context?: string;
+}
+
+export interface AffectedAsset {
+  name: string;
+  type: string;   // server, workstation, network, user_account
+  ip?: string;
+  criticality?: string;  // critical, high, medium, low
 }
 
 export interface PaginatedResponse<T> {

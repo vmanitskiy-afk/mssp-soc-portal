@@ -454,6 +454,7 @@ class IncidentService:
                 selectinload(PublishedIncident.status_history).selectinload(IncidentStatusChange.user),
                 selectinload(PublishedIncident.publisher),
                 selectinload(PublishedIncident.closer),
+                selectinload(PublishedIncident.acknowledger),
             )
             .where(PublishedIncident.id == incident_id)
         )
@@ -483,6 +484,10 @@ class IncidentService:
             "recommendations": incident.recommendations,
             "soc_actions": incident.soc_actions,
             "client_response": incident.client_response,
+            "ioc_indicators": incident.ioc_indicators or [],
+            "affected_assets": incident.affected_assets or [],
+            "acknowledged_at": incident.acknowledged_at.isoformat() if incident.acknowledged_at else None,
+            "acknowledged_by_name": incident.acknowledger.name if incident.acknowledger else None,
             "published_by_name": incident.publisher.name if incident.publisher else "",
             "published_at": incident.published_at.isoformat() if incident.published_at else None,
             "closed_by_name": incident.closer.name if incident.closer else None,
@@ -508,6 +513,33 @@ class IncidentService:
                 for sh in incident.status_history
             ],
         }
+
+    async def acknowledge_incident(
+        self, incident_id: str, user_id: str, tenant_id: str | None = None
+    ) -> dict:
+        """Client acknowledges the incident."""
+        incident = await self._get_incident(incident_id)
+        if tenant_id and str(incident.tenant_id) != tenant_id:
+            raise IncidentServiceError("Доступ запрещён", 403)
+        if incident.acknowledged_at:
+            raise IncidentServiceError("Инцидент уже подтверждён")
+
+        incident.acknowledged_at = datetime.now(timezone.utc)
+        incident.acknowledged_by = uuid.UUID(user_id)
+        await self.db.flush()
+        return {"acknowledged_at": incident.acknowledged_at.isoformat()}
+
+    async def update_ioc_assets(
+        self, incident_id: str, ioc_indicators: list | None = None, affected_assets: list | None = None
+    ) -> dict:
+        """SOC updates IOC indicators and affected assets."""
+        incident = await self._get_incident(incident_id)
+        if ioc_indicators is not None:
+            incident.ioc_indicators = ioc_indicators
+        if affected_assets is not None:
+            incident.affected_assets = affected_assets
+        await self.db.flush()
+        return {"ok": True}
 
     # ── Helpers ───────────────────────────────────────────────────
 

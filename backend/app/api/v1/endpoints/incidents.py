@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
-from app.core.security import CurrentUser, RoleRequired
+from app.core.security import CurrentUser, RoleRequired, get_current_user
 from app.services.incident_service import IncidentService, IncidentServiceError
 
 router = APIRouter()
@@ -180,3 +180,29 @@ async def update_response(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
     return {"ok": True}
+
+
+# ── Acknowledge incident ─────────────────────────────────────────
+
+@router.put("/{incident_id}/acknowledge")
+async def acknowledge_incident(
+    incident_id: str = Path(...),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Client acknowledges receipt of the incident."""
+    tenant_id = user.tenant_id
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="No tenant assigned")
+
+    service = IncidentService(db)
+    try:
+        result = await service.acknowledge_incident(
+            incident_id=incident_id,
+            user_id=user.user_id,
+            tenant_id=tenant_id,
+        )
+    except IncidentServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    return result

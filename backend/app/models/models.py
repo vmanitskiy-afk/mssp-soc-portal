@@ -117,6 +117,14 @@ class PublishedIncident(Base):
     # ── Client fills in ──
     client_response: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # ── IOC & Assets (SOC fills in) ──
+    ioc_indicators: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # [{type, value, context}]
+    affected_assets: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # [{name, type, ip, criticality}]
+
+    # ── Acknowledgment ──
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
     # ── Tracking ──
     published_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     closed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
@@ -128,6 +136,7 @@ class PublishedIncident(Base):
     tenant: Mapped["Tenant"] = relationship(back_populates="incidents")
     publisher: Mapped["User"] = relationship(foreign_keys=[published_by])
     closer: Mapped["User | None"] = relationship(foreign_keys=[closed_by])
+    acknowledger: Mapped["User | None"] = relationship(foreign_keys=[acknowledged_by])
     comments: Mapped[list["IncidentComment"]] = relationship(back_populates="incident", order_by="IncidentComment.created_at")
     status_history: Mapped[list["IncidentStatusChange"]] = relationship(back_populates="incident", order_by="IncidentStatusChange.created_at")
 

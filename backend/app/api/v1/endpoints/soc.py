@@ -13,7 +13,7 @@ SOC Operator endpoints — real implementation.
 import logging
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -286,6 +286,26 @@ async def change_status_soc(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
     return {"ok": True, "status": incident.status}
+
+
+@router.put("/incidents/{incident_id}/ioc-assets")
+async def update_ioc_assets(
+    incident_id: str = Path(...),
+    body: dict = Body(...),
+    user: CurrentUser = Depends(soc_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update IOC indicators and affected assets (SOC only)."""
+    service = IncidentService(db)
+    try:
+        await service.update_ioc_assets(
+            incident_id=incident_id,
+            ioc_indicators=body.get("ioc_indicators") if body else None,
+            affected_assets=body.get("affected_assets") if body else None,
+        )
+    except IncidentServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    return {"ok": True}
 
 
 # ══════════════════════════════════════════════════════════════════
