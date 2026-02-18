@@ -70,6 +70,29 @@ async def _get_rusiem(redis_client: aioredis.Redis) -> RuSIEMClient:
     )
 
 
+# ── Tenants List ──────────────────────────────────────────────────
+
+@router.get("/tenants")
+async def list_tenants(
+    user: CurrentUser = Depends(soc_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all active tenants for SOC operator dropdown."""
+    from sqlalchemy import select
+    from app.models.models import Tenant
+
+    result = await db.execute(
+        select(Tenant).where(Tenant.is_active == True).order_by(Tenant.name)
+    )
+    tenants = result.scalars().all()
+    return {
+        "items": [
+            {"id": str(t.id), "name": t.name, "short_name": t.short_name}
+            for t in tenants
+        ]
+    }
+
+
 # ── Incident Preview ─────────────────────────────────────────────
 
 @router.get("/incidents/preview/{rusiem_id}")
