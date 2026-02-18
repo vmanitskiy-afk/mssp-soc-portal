@@ -26,6 +26,18 @@ from app.models.models import (
 logger = logging.getLogger(__name__)
 
 
+def _parse_dt(value) -> datetime | None:
+    """Parse a datetime string or return None."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace(" ", "T"))
+    except (ValueError, TypeError):
+        return None
+
+
 class IncidentServiceError(Exception):
     def __init__(self, detail: str, status_code: int = 400):
         self.detail = detail
@@ -134,7 +146,7 @@ class IncidentService:
             event_source_ips=preview.get("event_source_ips", []),
             event_count=preview.get("event_count", 0),
             symptoms=preview.get("symptoms", []),
-            rusiem_created_at=preview.get("created_at"),
+            rusiem_created_at=_parse_dt(preview.get("created_at")),
             rusiem_raw_data=preview.get("rusiem_raw_data"),
             status="new",
             recommendations=recommendations,
