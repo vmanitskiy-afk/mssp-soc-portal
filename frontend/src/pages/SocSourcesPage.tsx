@@ -353,11 +353,13 @@ export default function SocSourcesPage() {
       {/* Add/Edit Modal */}
       {showModal && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, overflowY: 'auto', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
           onClick={() => setShowModal(false)}
         >
           <div
-            style={{ maxHeight: '85vh', overflowY: 'auto', width: '100%', maxWidth: '32rem', margin: '1rem' }}
+            style={{ width: '100%', maxWidth: '32rem', margin: '3rem auto', padding: '0 1rem' }}
+          >
+          <div
             className="card p-6 space-y-4 animate-in"
             onClick={(e) => e.stopPropagation()}
           >
@@ -470,6 +472,7 @@ export default function SocSourcesPage() {
                 {editingId ? 'Сохранить' : 'Добавить'}
               </button>
             </div>
+          </div>
           </div>
         </div>
       )}
