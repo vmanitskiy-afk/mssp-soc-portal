@@ -93,9 +93,17 @@ export default function SocUsersPage() {
       setShowForm(false);
       fetchUsers();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        'Ошибка создания';
+      const resp = (err as { response?: { data?: { detail?: unknown } } })?.response?.data;
+      let msg = 'Ошибка создания';
+      if (resp?.detail) {
+        if (typeof resp.detail === 'string') {
+          msg = resp.detail;
+        } else if (Array.isArray(resp.detail)) {
+          msg = resp.detail.map((e: { msg?: string }) => e.msg || JSON.stringify(e)).join('; ');
+        } else {
+          msg = JSON.stringify(resp.detail);
+        }
+      }
       setError(msg);
     } finally {
       setCreating(false);
@@ -222,8 +230,8 @@ export default function SocUsersPage() {
                   type="password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  placeholder="Минимум 8 символов"
-                  minLength={8}
+                  placeholder="Минимум 12 символов"
+                  minLength={12}
                   style={{
                     width: '100%', padding: '0.625rem 0.75rem',
                     background: '#0f172a', border: '1px solid #334155',
