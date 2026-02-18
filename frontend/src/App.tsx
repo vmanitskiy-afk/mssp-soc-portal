@@ -11,6 +11,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import SocDashboardPage from './pages/SocDashboardPage';
 import SocPublishPage from './pages/SocPublishPage';
 import SocUsersPage from './pages/SocUsersPage';
+import ReportsPage from './pages/ReportsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="/incidents/:id" element={<IncidentDetailPage />} />
         <Route path="/sources" element={<SourcesPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
         <Route path="/soc" element={<SocDashboardPage />} />
         <Route path="/soc/publish" element={<SocPublishPage />} />
         <Route path="/soc/users" element={<SocUsersPage />} />

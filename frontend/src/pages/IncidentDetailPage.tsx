@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Clock, Monitor, Globe, Tag, User,
   MessageSquare, Send, ChevronDown, Shield, CheckCircle,
-  AlertTriangle, Loader2,
+  AlertTriangle, Loader2, Download,
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -147,6 +147,28 @@ export default function IncidentDetailPage() {
             )}
           </div>
         )}
+
+        {/* PDF Download */}
+        <button
+          onClick={async () => {
+            try {
+              const resp = await api.get(`/reports/incident/${id}`, { responseType: 'blob' });
+              const url = window.URL.createObjectURL(resp.data);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `incident_${incident.rusiem_incident_id}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              window.URL.revokeObjectURL(url);
+            } catch { /* ignore */ }
+          }}
+          className="btn-secondary flex items-center gap-1.5 text-sm"
+          title="Скачать PDF"
+        >
+          <Download className="w-4 h-4" />
+          PDF
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-5">
