@@ -136,6 +136,7 @@ export interface DashboardSummary {
     no_logs: number;
     error: number;
   };
+  top_categories: { category: string; count: number; open: number }[];
 }
 
 export interface ChartDataPoint {

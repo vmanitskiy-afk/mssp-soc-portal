@@ -23,15 +23,17 @@ class DashboardService:
         self.db = db
 
     async def get_summary(self, tenant_id: str | None) -> dict:
-        """Main dashboard summary: incidents, SLA, sources."""
+        """Main dashboard summary: incidents, SLA, sources, categories."""
         incidents = await self._incident_stats(tenant_id)
         sla = await self._latest_sla(tenant_id)
         sources = await self._source_stats(tenant_id)
+        categories = await self._top_categories(tenant_id)
 
         return {
             "incidents": incidents,
             "sla": sla,
             "sources": sources,
+            "top_categories": categories,
         }
 
     async def get_incidents_chart(self, tenant_id: str | None, days: int = 7) -> list[dict]:
@@ -208,3 +210,29 @@ class DashboardService:
             "mttr_minutes": snapshot.mttr_minutes,
             "compliance_pct": snapshot.sla_compliance_pct,
         }
+
+    async def _top_categories(self, tenant_id: str | None, limit: int = 8) -> list[dict]:
+        """Top incident categories (use cases) with counts."""
+        query = (
+            select(
+                PublishedIncident.category,
+                func.count().label("count"),
+                func.count().filter(
+                    PublishedIncident.status.notin_(["closed", "false_positive"])
+                ).label("open"),
+            )
+            .where(PublishedIncident.category.isnot(None))
+            .where(PublishedIncident.category != "")
+        )
+        if tenant_id:
+            query = query.where(PublishedIncident.tenant_id == tenant_id)
+
+        query = query.group_by(PublishedIncident.category).order_by(func.count().desc()).limit(limit)
+
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        return [
+            {"category": row.category, "count": row.count, "open": row.open}
+            for row in rows
+        ]
