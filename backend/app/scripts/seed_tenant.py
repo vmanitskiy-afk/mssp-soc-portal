@@ -6,7 +6,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from sqlalchemy import select
-from app.core.database import async_session
+from app.core.database import AsyncSessionLocal
 from app.models.models import Tenant
 
 
@@ -21,7 +21,7 @@ async def create_tenant():
         rusiem_key = os.getenv("RUSIEM_API_KEY", "")
     contact_email = input("Contact email (optional): ").strip() or None
 
-    async with async_session() as db:
+    async with AsyncSessionLocal() as db:
         # Check if tenant exists
         result = await db.execute(select(Tenant).where(Tenant.short_name == short_name))
         existing = result.scalar_one_or_none()
