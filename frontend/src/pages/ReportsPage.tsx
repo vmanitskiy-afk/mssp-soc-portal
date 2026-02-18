@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   FileText, Download, Calendar, Loader2, TrendingUp, Clock,
-  Shield, BarChart3, FileSpreadsheet, ChevronDown, Users,
+  Shield, Activity, Users, ChevronDown,
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -37,44 +37,66 @@ function getPresetDates(preset: string): { from: string; to: string } {
   const today = new Date();
   const y = today.getFullYear();
   const m = today.getMonth();
-
   switch (preset) {
     case 'current_month':
-      return { from: fmt(new Date(y, m, 1)), to: fmt(today) };
+      return { from: fmtDate(new Date(y, m, 1)), to: fmtDate(today) };
     case 'last_month':
-      return { from: fmt(new Date(y, m - 1, 1)), to: fmt(new Date(y, m, 0)) };
+      return { from: fmtDate(new Date(y, m - 1, 1)), to: fmtDate(new Date(y, m, 0)) };
     case '90d': {
       const d = new Date(today);
       d.setDate(d.getDate() - 90);
-      return { from: fmt(d), to: fmt(today) };
+      return { from: fmtDate(d), to: fmtDate(today) };
     }
     case 'current_quarter': {
       const qStart = new Date(y, Math.floor(m / 3) * 3, 1);
-      return { from: fmt(qStart), to: fmt(today) };
+      return { from: fmtDate(qStart), to: fmtDate(today) };
     }
     default:
-      return { from: fmt(new Date(y, m, 1)), to: fmt(today) };
+      return { from: fmtDate(new Date(y, m, 1)), to: fmtDate(today) };
   }
 }
 
-function fmt(d: Date): string {
+function fmtDate(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
-function formatMinutes(min: number | null): string {
-  if (min === null || min === undefined) return '\u2014';
-  if (min < 60) return `${Math.round(min)} \u043c\u0438\u043d`;
-  if (min < 1440) return `${(min / 60).toFixed(1)} \u0447`;
-  return `${(min / 1440).toFixed(1)} \u0434\u043d`;
+function fmtMinutes(min: number | null | undefined): string {
+  if (min === null || min === undefined) return '—';
+  if (min < 60) return `${Math.round(min)} мин`;
+  if (min < 1440) return `${(min / 60).toFixed(1)} ч`;
+  return `${(min / 1440).toFixed(1)} дн`;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
+
+async function extractError(err: unknown): Promise<string> {
+  try {
+    const resp = (err as { response?: { data?: Blob } })?.response?.data;
+    if (resp instanceof Blob) {
+      const text = await resp.text();
+      const json = JSON.parse(text);
+      return json.detail || 'Ошибка генерации отчёта';
+    }
+  } catch { /* ignore */ }
+  return 'Ошибка генерации отчёта';
 }
 
 export default function ReportsPage() {
   const { user } = useAuthStore();
-  const isSoc = user?.role?.startsWith('soc_');
+  const isSoc = user?.role?.startsWith('soc_') || false;
 
   const [preset, setPreset] = useState('current_month');
-  const [periodFrom, setPeriodFrom] = useState('');
-  const [periodTo, setPeriodTo] = useState('');
+  const [periodFrom, setPeriodFrom] = useState(() => getPresetDates('current_month').from);
+  const [periodTo, setPeriodTo] = useState(() => getPresetDates('current_month').to);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenant, setSelectedTenant] = useState('');
   const [slaHistory, setSlaHistory] = useState<SlaPoint[]>([]);
@@ -88,20 +110,16 @@ export default function ReportsPage() {
 
   // Load tenants for SOC users
   useEffect(() => {
-    if (isSoc) {
-      api.get('/soc/tenants').then(({ data }) => {
-        setTenants(data);
-        if (data.length > 0) setSelectedTenant(data[0].id);
-      }).catch(() => {});
-    }
+    if (!isSoc) return;
+    api.get('/soc/tenants')
+      .then(({ data }) => {
+        setTenants(data || []);
+        if (data && data.length > 0) setSelectedTenant(data[0].id);
+      })
+      .catch(() => {});
   }, [isSoc]);
 
-  useEffect(() => {
-    const dates = getPresetDates('current_month');
-    setPeriodFrom(dates.from);
-    setPeriodTo(dates.to);
-  }, []);
-
+  // Apply preset
   function applyPreset(p: string) {
     setPreset(p);
     setShowPresets(false);
@@ -112,31 +130,35 @@ export default function ReportsPage() {
     }
   }
 
+  // Load SLA data
   useEffect(() => {
     if (!periodFrom) return;
-    if (isSoc && !selectedTenant) { setLoadingSla(false); return; }
+    if (isSoc && !selectedTenant) {
+      setLoadingSla(false);
+      return;
+    }
     setLoadingSla(true);
-    const tenantParam = isSoc && selectedTenant ? `&tenant_id=${selectedTenant}` : '';
+    const tp = isSoc && selectedTenant ? `&tenant_id=${selectedTenant}` : '';
     Promise.all([
-      api.get(`/dashboard/sla-history?period=90d${tenantParam}`),
-      api.get(`/dashboard/sla?period=30d${tenantParam}`),
+      api.get(`/dashboard/sla-history?period=90d${tp}`),
+      api.get(`/dashboard/sla?period=30d${tp}`),
     ])
       .then(([hist, cur]) => {
-        setSlaHistory(hist.data);
-        setSlaCurrent(cur.data);
+        setSlaHistory(Array.isArray(hist.data) ? hist.data : []);
+        setSlaCurrent(cur.data || null);
       })
       .catch(() => {})
       .finally(() => setLoadingSla(false));
   }, [periodFrom, selectedTenant, isSoc]);
 
-  const tenantParam = isSoc && selectedTenant ? selectedTenant : undefined;
+  const tid = isSoc && selectedTenant ? selectedTenant : undefined;
 
   async function downloadMonthlyPdf() {
     setLoadingPdf(true);
     setError('');
     try {
       const resp = await api.get('/reports/monthly', {
-        params: { period_from: periodFrom, period_to: periodTo, tenant_id: tenantParam },
+        params: { period_from: periodFrom, period_to: periodTo, tenant_id: tid },
         responseType: 'blob',
       });
       downloadBlob(resp.data, `soc_report_${periodFrom}_${periodTo}.pdf`);
@@ -152,7 +174,7 @@ export default function ReportsPage() {
     setError('');
     try {
       const resp = await api.get('/reports/sla-pdf', {
-        params: { period_from: periodFrom, period_to: periodTo, tenant_id: tenantParam },
+        params: { period_from: periodFrom, period_to: periodTo, tenant_id: tid },
         responseType: 'blob',
       });
       downloadBlob(resp.data, `sla_report_${periodFrom}_${periodTo}.pdf`);
@@ -168,7 +190,7 @@ export default function ReportsPage() {
     setError('');
     try {
       const resp = await api.get('/reports/csv', {
-        params: { period_from: periodFrom, period_to: periodTo, tenant_id: tenantParam },
+        params: { period_from: periodFrom, period_to: periodTo, tenant_id: tid },
         responseType: 'blob',
       });
       downloadBlob(resp.data, `incidents_${periodFrom}_${periodTo}.csv`);
@@ -179,15 +201,16 @@ export default function ReportsPage() {
     }
   }
 
-  const complianceColor = slaCurrent?.compliance_pct
-    ? slaCurrent.compliance_pct >= 95 ? 'text-emerald-400' : slaCurrent.compliance_pct >= 80 ? 'text-amber-400' : 'text-red-400'
+  const compColor = slaCurrent?.compliance_pct != null
+    ? (slaCurrent.compliance_pct >= 95 ? 'text-emerald-400' : slaCurrent.compliance_pct >= 80 ? 'text-amber-400' : 'text-red-400')
     : 'text-surface-500';
 
   return (
     <div className="space-y-6 animate-in">
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-surface-100">{'\u041E\u0442\u0447\u0451\u0442\u044B'}</h1>
-        <p className="text-sm text-surface-500 mt-1">SLA-{'\u043C\u0435\u0442\u0440\u0438\u043A\u0438'} {'\u0438'} {'\u044D\u043A\u0441\u043F\u043E\u0440\u0442'} {'\u0434\u0430\u043D\u043D\u044B\u0445'}</p>
+        <h1 className="text-2xl font-semibold text-surface-100">Отчёты</h1>
+        <p className="text-sm text-surface-500 mt-1">SLA-метрики и экспорт данных</p>
       </div>
 
       {error && (
@@ -196,31 +219,35 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Period selector */}
+      {/* Period + Tenant selector */}
       <div className="card p-4">
         <div className="flex items-center gap-4 flex-wrap">
+          {/* Tenant selector for SOC */}
           {isSoc && (
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-surface-500" />
               <select
                 value={selectedTenant}
                 onChange={(e) => setSelectedTenant(e.target.value)}
-                className="input text-sm w-56"
+                className="input text-sm"
+                style={{ width: 220 }}
               >
-                <option value="">{'\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043A\u043B\u0438\u0435\u043D\u0442\u0430'}</option>
+                <option value="">Выберите клиента</option>
                 {tenants.map(t => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
               </select>
             </div>
           )}
+
+          {/* Period presets */}
           <div className="relative">
             <button
               onClick={() => setShowPresets(!showPresets)}
               className="flex items-center gap-2 px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-200 hover:border-surface-600"
             >
               <Calendar className="w-4 h-4 text-surface-500" />
-              {PERIOD_PRESETS.find(p => p.value === preset)?.label || '\u041F\u0435\u0440\u0438\u043E\u0434'}
+              {PERIOD_PRESETS.find(p => p.value === preset)?.label || 'Период'}
               <ChevronDown className="w-3 h-3 text-surface-500" />
             </button>
             {showPresets && (
@@ -238,19 +265,22 @@ export default function ReportsPage() {
             )}
           </div>
 
+          {/* Date inputs */}
           <div className="flex items-center gap-2">
             <input
               type="date"
               value={periodFrom}
               onChange={(e) => { setPeriodFrom(e.target.value); setPreset('custom'); }}
-              className="input text-sm w-40"
+              className="input text-sm"
+              style={{ width: 155 }}
             />
-            <span className="text-surface-600">{'\u2014'}</span>
+            <span className="text-surface-600">—</span>
             <input
               type="date"
               value={periodTo}
               onChange={(e) => { setPeriodTo(e.target.value); setPreset('custom'); }}
-              className="input text-sm w-40"
+              className="input text-sm"
+              style={{ width: 155 }}
             />
           </div>
         </div>
@@ -258,54 +288,41 @@ export default function ReportsPage() {
 
       {/* SLA KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <div className="card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Clock className="w-4 h-4 text-surface-500" />
-            <span className="text-xs font-medium text-surface-500">MTTA ({'\u0441\u0440. \u0440\u0435\u0430\u043A\u0446\u0438\u044F'})</span>
-          </div>
-          <p className="text-2xl font-semibold font-mono text-brand-400">
-            {loadingSla ? '...' : formatMinutes(slaCurrent?.mtta_minutes ?? null)}
-          </p>
-          <p className="text-xs text-surface-600 mt-1">{'\u0437\u0430'} 30 {'\u0434\u043D\u0435\u0439'}</p>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="w-4 h-4 text-surface-500" />
-            <span className="text-xs font-medium text-surface-500">MTTR ({'\u0441\u0440. \u0440\u0435\u0448\u0435\u043D\u0438\u0435'})</span>
-          </div>
-          <p className="text-2xl font-semibold font-mono text-brand-400">
-            {loadingSla ? '...' : formatMinutes(slaCurrent?.mttr_minutes ?? null)}
-          </p>
-          <p className="text-xs text-surface-600 mt-1">{'\u0437\u0430'} 30 {'\u0434\u043D\u0435\u0439'}</p>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Shield className="w-4 h-4 text-surface-500" />
-            <span className="text-xs font-medium text-surface-500">SLA Compliance</span>
-          </div>
-          <p className={`text-2xl font-semibold font-mono ${complianceColor}`}>
-            {loadingSla ? '...' : slaCurrent?.compliance_pct != null ? `${slaCurrent.compliance_pct}%` : '\u2014'}
-          </p>
-          <p className="text-xs text-surface-600 mt-1">{'\u0446\u0435\u043B\u0435\u0432\u043E\u0439: \u2265 95%'}</p>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <BarChart3 className="w-4 h-4 text-surface-500" />
-            <span className="text-xs font-medium text-surface-500">{'\u0418\u043D\u0446\u0438\u0434\u0435\u043D\u0442\u043E\u0432'}</span>
-          </div>
-          <p className="text-2xl font-semibold font-mono text-surface-200">
-            {loadingSla ? '...' : slaHistory.length > 0
-              ? slaHistory[slaHistory.length - 1]?.incidents_total || '\u2014'
-              : '\u2014'}
-          </p>
-          <p className="text-xs text-surface-600 mt-1">{'\u0437\u0430\u043A\u0440\u044B\u0442\u043E \u0437\u0430 \u043F\u0435\u0440\u0438\u043E\u0434'}</p>
-        </div>
+        <KPICard
+          icon={Clock}
+          label="MTTA (ср. реакция)"
+          value={loadingSla ? '...' : fmtMinutes(slaCurrent?.mtta_minutes)}
+          accent="text-brand-400"
+          sub="за 30 дней"
+        />
+        <KPICard
+          icon={TrendingUp}
+          label="MTTR (ср. решение)"
+          value={loadingSla ? '...' : fmtMinutes(slaCurrent?.mttr_minutes)}
+          accent="text-brand-400"
+          sub="за 30 дней"
+        />
+        <KPICard
+          icon={Shield}
+          label="SLA Compliance"
+          value={loadingSla ? '...' : slaCurrent?.compliance_pct != null ? `${slaCurrent.compliance_pct}%` : '—'}
+          accent={compColor}
+          sub="целевой: ≥ 95%"
+        />
+        <KPICard
+          icon={Activity}
+          label="Инцидентов"
+          value={loadingSla ? '...' : (slaHistory.length > 0 ? String(slaHistory[slaHistory.length - 1]?.incidents_total ?? '—') : '—')}
+          accent="text-surface-200"
+          sub="закрыто за период"
+        />
       </div>
 
       {/* SLA Trend Charts */}
       <div className="grid grid-cols-2 gap-4">
+        {/* MTTA/MTTR */}
         <div className="card p-5">
-          <h2 className="text-sm font-semibold text-surface-300 mb-4">{'\u0422\u0440\u0435\u043D\u0434'} MTTA / MTTR ({'\u043C\u0438\u043D\u0443\u0442\u044B'})</h2>
+          <h2 className="text-sm font-semibold text-surface-300 mb-4">Тренд MTTA / MTTR (минуты)</h2>
           <div className="h-56">
             {slaHistory.length > 1 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -313,9 +330,9 @@ export default function ReportsPage() {
                   <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tick={{ fill: '#657591', fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: '#657591', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
                   <Tooltip
-                    contentStyle={{ background: '#1a1d27', border: '1px solid #394253', borderRadius: '8px', fontSize: '12px' }}
+                    contentStyle={{ background: '#1a1d27', border: '1px solid #394253', borderRadius: 8, fontSize: 12 }}
                     labelStyle={{ color: '#8593ab' }}
-                    formatter={(value: number) => [`${value} \u043C\u0438\u043D`]}
+                    formatter={(v: number) => [`${v} мин`]}
                   />
                   <Line type="monotone" dataKey="mtta_minutes" stroke="#3b82f6" strokeWidth={2} dot={false} name="MTTA" connectNulls />
                   <Line type="monotone" dataKey="mttr_minutes" stroke="#f97316" strokeWidth={2} dot={false} name="MTTR" connectNulls />
@@ -323,7 +340,7 @@ export default function ReportsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-surface-600 text-sm">
-                {'\u041D\u0435\u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u0434\u0430\u043D\u043D\u044B\u0445 \u0434\u043B\u044F \u0433\u0440\u0430\u0444\u0438\u043A\u0430'}
+                Недостаточно данных для графика
               </div>
             )}
           </div>
@@ -337,6 +354,7 @@ export default function ReportsPage() {
           </div>
         </div>
 
+        {/* Compliance */}
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-surface-300 mb-4">SLA Compliance (%)</h2>
           <div className="h-56">
@@ -352,15 +370,15 @@ export default function ReportsPage() {
                   <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tick={{ fill: '#657591', fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis domain={[0, 100]} tick={{ fill: '#657591', fontSize: 11 }} axisLine={false} tickLine={false} />
                   <Tooltip
-                    contentStyle={{ background: '#1a1d27', border: '1px solid #394253', borderRadius: '8px', fontSize: '12px' }}
-                    formatter={(value: number) => [`${value}%`]}
+                    contentStyle={{ background: '#1a1d27', border: '1px solid #394253', borderRadius: 8, fontSize: 12 }}
+                    formatter={(v: number) => [`${v}%`]}
                   />
                   <Area type="monotone" dataKey="compliance_pct" stroke="#22c55e" strokeWidth={2} fill="url(#compGrad)" name="Compliance" connectNulls />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-surface-600 text-sm">
-                {'\u041D\u0435\u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u0434\u0430\u043D\u043D\u044B\u0445 \u0434\u043B\u044F \u0433\u0440\u0430\u0444\u0438\u043A\u0430'}
+                Недостаточно данных для графика
               </div>
             )}
           </div>
@@ -369,92 +387,95 @@ export default function ReportsPage() {
 
       {/* Export Cards */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="card p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-              <FileText className="w-5 h-5 text-red-400" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-surface-200">{'\u041E\u0442\u0447\u0451\u0442 SOC'}</h3>
-              <p className="text-xs text-surface-500">PDF {'\u2022 \u0421\u0432\u043E\u0434\u043A\u0430 \u0438\u043D\u0446\u0438\u0434\u0435\u043D\u0442\u043E\u0432 + SLA'}</p>
-            </div>
-          </div>
-          <p className="text-xs text-surface-500 mb-4">
-            {'\u041F\u043E\u043B\u043D\u044B\u0439 \u043E\u0442\u0447\u0451\u0442 \u0437\u0430 \u043F\u0435\u0440\u0438\u043E\u0434: \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043A\u0430 \u043F\u043E \u043F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442\u0430\u043C, \u0441\u0442\u0430\u0442\u0443\u0441\u0430\u043C, \u043C\u0435\u0442\u0440\u0438\u043A\u0438 SLA.'}
-          </p>
-          <button onClick={downloadMonthlyPdf} disabled={loadingPdf} className="btn-primary text-sm w-full flex items-center justify-center gap-2">
-            {loadingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            {loadingPdf ? '\u0413\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F...' : '\u0421\u043A\u0430\u0447\u0430\u0442\u044C PDF'}
-          </button>
-        </div>
-
-        <div className="card p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-surface-200">{'\u041E\u0442\u0447\u0451\u0442 SLA'}</h3>
-              <p className="text-xs text-surface-500">PDF {'\u2022'} MTTA/MTTR {'\u043F\u043E \u043F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442\u0430\u043C'}</p>
-            </div>
-          </div>
-          <p className="text-xs text-surface-500 mb-4">
-            {'\u0414\u0435\u0442\u0430\u043B\u044C\u043D\u044B\u0439 SLA: \u043C\u0435\u0442\u0440\u0438\u043A\u0438 \u043F\u043E \u043F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442\u0430\u043C, compliance, \u0446\u0435\u043B\u0435\u0432\u044B\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F.'}
-          </p>
-          <button onClick={downloadSlaPdf} disabled={loadingSlaPdf} className="btn-primary text-sm w-full flex items-center justify-center gap-2">
-            {loadingSlaPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            {loadingSlaPdf ? '\u0413\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F...' : '\u0421\u043A\u0430\u0447\u0430\u0442\u044C PDF'}
-          </button>
-        </div>
-
-        <div className="card p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-              <FileSpreadsheet className="w-5 h-5 text-blue-400" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-surface-200">{'\u042D\u043A\u0441\u043F\u043E\u0440\u0442 CSV'}</h3>
-              <p className="text-xs text-surface-500">{'\u0422\u0430\u0431\u043B\u0438\u0446\u0430 \u2022 \u0414\u043B\u044F Excel / \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0438'}</p>
-            </div>
-          </div>
-          <p className="text-xs text-surface-500 mb-4">
-            {'\u0412\u0441\u0435 \u0438\u043D\u0446\u0438\u0434\u0435\u043D\u0442\u044B \u0437\u0430 \u043F\u0435\u0440\u0438\u043E\u0434 \u0432 CSV. ID, \u043F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442, \u0441\u0442\u0430\u0442\u0443\u0441, IP, \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438.'}
-          </p>
-          <button onClick={downloadCsv} disabled={loadingCsv} className="btn-secondary text-sm w-full flex items-center justify-center gap-2">
-            {loadingCsv ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
-            {loadingCsv ? '\u0412\u044B\u0433\u0440\u0443\u0437\u043A\u0430...' : '\u0421\u043A\u0430\u0447\u0430\u0442\u044C CSV'}
-          </button>
-        </div>
+        {/* SOC Report */}
+        <ExportCard
+          icon={<FileText className="w-5 h-5 text-red-400" />}
+          iconBg="bg-red-500/10"
+          title="Отчёт SOC"
+          subtitle="PDF • Сводка инцидентов + SLA"
+          description="Полный отчёт за период: статистика по приоритетам, статусам, метрики SLA."
+          buttonText="Скачать PDF"
+          loading={loadingPdf}
+          onClick={downloadMonthlyPdf}
+          primary
+        />
+        {/* SLA Report */}
+        <ExportCard
+          icon={<Shield className="w-5 h-5 text-emerald-400" />}
+          iconBg="bg-emerald-500/10"
+          title="Отчёт SLA"
+          subtitle="PDF • MTTA/MTTR по приоритетам"
+          description="Детальный SLA: метрики по приоритетам, compliance, целевые значения."
+          buttonText="Скачать PDF"
+          loading={loadingSlaPdf}
+          onClick={downloadSlaPdf}
+          primary
+        />
+        {/* CSV */}
+        <ExportCard
+          icon={<Download className="w-5 h-5 text-blue-400" />}
+          iconBg="bg-blue-500/10"
+          title="Экспорт CSV"
+          subtitle="Таблица • Для Excel / аналитики"
+          description="Все инциденты за период в CSV. ID, приоритет, статус, IP, рекомендации."
+          buttonText="Скачать CSV"
+          loading={loadingCsv}
+          onClick={downloadCsv}
+          primary={false}
+        />
       </div>
 
+      {/* Tip */}
       <div className="p-4 bg-brand-500/5 border border-brand-500/10 rounded-xl text-sm text-brand-300">
-        <strong>{'\u0421\u043E\u0432\u0435\u0442:'}</strong> PDF {'\u043F\u043E \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E\u043C\u0443 \u0438\u043D\u0446\u0438\u0434\u0435\u043D\u0442\u0443 \u043C\u043E\u0436\u043D\u043E \u0441\u043A\u0430\u0447\u0430\u0442\u044C \u043D\u0430 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0435 \u0434\u0435\u0442\u0430\u043B\u0438\u0437\u0430\u0446\u0438\u0438.'} SLA-{'\u043C\u0435\u0442\u0440\u0438\u043A\u0438 \u0440\u0430\u0441\u0441\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043A\u0430\u0436\u0434\u044B\u0439 \u0447\u0430\u0441.'}
+        <strong>Совет:</strong> PDF по отдельному инциденту можно скачать на странице детализации.
+        SLA-метрики рассчитываются автоматически каждый час.
       </div>
     </div>
   );
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(url);
+/* ── Sub-components ──────────────────────────────────────────── */
+
+function KPICard({ icon: Icon, label, value, accent, sub }: {
+  icon: React.ElementType; label: string; value: string; accent: string; sub: string;
+}) {
+  return (
+    <div className="card p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Icon className="w-4 h-4 text-surface-500" />
+        <span className="text-xs font-medium text-surface-500">{label}</span>
+      </div>
+      <p className={`text-2xl font-semibold font-mono ${accent}`}>{value}</p>
+      <p className="text-xs text-surface-600 mt-1">{sub}</p>
+    </div>
+  );
 }
 
-async function extractError(err: unknown): Promise<string> {
-  const resp = (err as { response?: { data?: Blob } })?.response?.data;
-  if (resp instanceof Blob) {
-    try {
-      const text = await resp.text();
-      const json = JSON.parse(text);
-      return json.detail || '\u041E\u0448\u0438\u0431\u043A\u0430 \u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0438 \u043E\u0442\u0447\u0451\u0442\u0430';
-    } catch {
-      return '\u041E\u0448\u0438\u0431\u043A\u0430 \u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0438 \u043E\u0442\u0447\u0451\u0442\u0430';
-    }
-  }
-  return '\u041E\u0448\u0438\u0431\u043A\u0430 \u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0438 \u043E\u0442\u0447\u0451\u0442\u0430';
+function ExportCard({ icon, iconBg, title, subtitle, description, buttonText, loading, onClick, primary }: {
+  icon: React.ReactNode; iconBg: string; title: string; subtitle: string;
+  description: string; buttonText: string; loading: boolean;
+  onClick: () => void; primary: boolean;
+}) {
+  return (
+    <div className="card p-5">
+      <div className="flex items-center gap-3 mb-3">
+        <div className={`w-10 h-10 rounded-lg ${iconBg} flex items-center justify-center`}>
+          {icon}
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-surface-200">{title}</h3>
+          <p className="text-xs text-surface-500">{subtitle}</p>
+        </div>
+      </div>
+      <p className="text-xs text-surface-500 mb-4">{description}</p>
+      <button
+        onClick={onClick}
+        disabled={loading}
+        className={`${primary ? 'btn-primary' : 'btn-secondary'} text-sm w-full flex items-center justify-center gap-2`}
+      >
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        {loading ? 'Загрузка...' : buttonText}
+      </button>
+    </div>
+  );
 }
