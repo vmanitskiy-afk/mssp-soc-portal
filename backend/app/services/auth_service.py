@@ -60,11 +60,11 @@ class AuthService:
         """
         user = await self.get_user_by_email(email)
         if not user:
-            raise AuthError("Invalid email or password")
+            raise AuthError("Неверный email или пароль")
 
         if not verify_password(password, user.password_hash):
             await self._log_action(user, "login_failed", ip_address=ip_address)
-            raise AuthError("Invalid email or password")
+            raise AuthError("Неверный email или пароль")
 
         token_data = self._build_token_data(user)
 
@@ -100,15 +100,15 @@ class AuthService:
         payload = decode_token(temp_token)
 
         if payload.get("type") != "mfa_pending":
-            raise AuthError("Invalid token type for MFA verification")
+            raise AuthError("Неверный тип токена для MFA верификации")
 
         user = await self.get_user_by_id(payload["sub"])
         if not user or not user.mfa_secret:
-            raise AuthError("User not found or MFA not configured")
+            raise AuthError("Пользователь не найден или MFA не настроен")
 
         if not verify_mfa_code(user.mfa_secret, totp_code):
             await self._log_action(user, "mfa_failed", ip_address=ip_address)
-            raise AuthError("Invalid TOTP code")
+            raise AuthError("Неверный TOTP код")
 
         token_data = self._build_token_data(user)
         access_token = create_access_token(token_data)
@@ -129,11 +129,11 @@ class AuthService:
         payload = decode_token(refresh_token_str)
 
         if payload.get("type") != "refresh":
-            raise AuthError("Invalid token type")
+            raise AuthError("Неверный тип токена")
 
         user = await self.get_user_by_id(payload["sub"])
         if not user:
-            raise AuthError("User not found")
+            raise AuthError("Пользователь не найден")
 
         token_data = self._build_token_data(user)
         new_access = create_access_token(token_data)
@@ -153,7 +153,7 @@ class AuthService:
         """
         user = await self.get_user_by_id(user_id)
         if not user:
-            raise AuthError("User not found", 404)
+            raise AuthError("Пользователь не найден", 404)
 
         secret = generate_mfa_secret()
         uri = get_mfa_uri(secret, user.email)
@@ -168,10 +168,10 @@ class AuthService:
         """Confirm MFA setup by verifying first TOTP code."""
         user = await self.get_user_by_id(user_id)
         if not user or not user.mfa_secret:
-            raise AuthError("MFA not initialized. Call /auth/mfa/setup first.", 400)
+            raise AuthError("MFA не инициализирован. Сначала вызовите настройку MFA.", 400)
 
         if not verify_mfa_code(user.mfa_secret, totp_code):
-            raise AuthError("Invalid TOTP code. Scan QR again and retry.", 400)
+            raise AuthError("Неверный TOTP код. Отсканируйте QR заново.", 400)
 
         user.mfa_enabled = True
         await self.db.flush()
@@ -186,13 +186,13 @@ class AuthService:
     ) -> dict:
         user = await self.get_user_by_id(user_id)
         if not user:
-            raise AuthError("User not found", 404)
+            raise AuthError("Пользователь не найден", 404)
 
         if not verify_password(old_password, user.password_hash):
-            raise AuthError("Current password is incorrect", 400)
+            raise AuthError("Текущий пароль неверный", 400)
 
         if len(new_password) < 12:
-            raise AuthError("Password must be at least 12 characters", 400)
+            raise AuthError("Пароль должен содержать минимум 12 символов", 400)
 
         user.password_hash = hash_password(new_password)
         await self.db.flush()

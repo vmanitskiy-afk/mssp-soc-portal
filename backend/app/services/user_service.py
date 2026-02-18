@@ -48,23 +48,23 @@ class UserService:
         - Email must be unique
         """
         if role not in ALL_ROLES:
-            raise UserServiceError(f"Invalid role: {role}. Must be one of: {ALL_ROLES}")
+            raise UserServiceError(f"Недопустимая роль: {role}. Допустимые: {ALL_ROLES}")
 
         if role in SOC_ROLES and tenant_id:
-            raise UserServiceError("SOC staff must not be assigned to a tenant")
+            raise UserServiceError("Сотрудники SOC не привязываются к клиенту")
 
         if role in CLIENT_ROLES and not tenant_id:
-            raise UserServiceError("Client users must be assigned to a tenant")
+            raise UserServiceError("Для клиентской роли необходимо выбрать клиента")
 
         if len(password) < 12:
-            raise UserServiceError("Password must be at least 12 characters")
+            raise UserServiceError("Пароль должен содержать минимум 12 символов")
 
         # Check email uniqueness
         existing = await self.db.execute(
             select(User).where(User.email == email)
         )
         if existing.scalar_one_or_none():
-            raise UserServiceError(f"User with email {email} already exists")
+            raise UserServiceError(f"Пользователь с email {email} уже существует")
 
         # Verify tenant exists
         if tenant_id:
@@ -72,7 +72,7 @@ class UserService:
                 select(Tenant).where(Tenant.id == tenant_id)
             )
             if not tenant.scalar_one_or_none():
-                raise UserServiceError(f"Tenant {tenant_id} not found")
+                raise UserServiceError(f"Клиент {tenant_id} не найден")
 
         user = User(
             email=email,
@@ -141,7 +141,7 @@ class UserService:
         """Soft-delete user."""
         user = await self.get_user(user_id)
         if not user:
-            raise UserServiceError("User not found", 404)
+            raise UserServiceError("Пользователь не найден", 404)
 
         user.is_active = False
         await self.db.flush()
@@ -160,11 +160,11 @@ class UserService:
     async def reset_password(self, user_id: str, new_password: str, reset_by_id: str) -> dict:
         """Admin password reset (no old password needed)."""
         if len(new_password) < 12:
-            raise UserServiceError("Password must be at least 12 characters")
+            raise UserServiceError("Пароль должен содержать минимум 12 символов")
 
         user = await self.get_user(user_id)
         if not user:
-            raise UserServiceError("User not found", 404)
+            raise UserServiceError("Пользователь не найден", 404)
 
         user.password_hash = hash_password(new_password)
         user.mfa_enabled = False  # Force MFA re-setup after reset

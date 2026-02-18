@@ -5,7 +5,9 @@ MSSP SOC Portal — FastAPI application entry point.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
@@ -53,6 +55,36 @@ def create_app() -> FastAPI:
     # Routers
     from app.api.v1.router import api_router
     application.include_router(api_router, prefix="/api")
+
+    # Pydantic validation errors → Russian
+    VALIDATION_TRANSLATIONS = {
+        "value is not a valid email address": "Некорректный email адрес",
+        "field required": "Обязательное поле",
+        "value is not a valid integer": "Значение должно быть числом",
+        "ensure this value has at least": "Минимальная длина",
+        "string does not match regex": "Неверный формат",
+        "value is not a valid uuid": "Некорректный UUID",
+        "none is not an allowed value": "Поле не может быть пустым",
+        "special-use": "Некорректный email: домен зарезервирован и не может использоваться",
+    }
+
+    @application.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        errors = []
+        for error in exc.errors():
+            msg = error.get("msg", "")
+            # Translate known messages
+            translated = msg
+            for en, ru in VALIDATION_TRANSLATIONS.items():
+                if en.lower() in msg.lower():
+                    translated = ru
+                    break
+            field = " → ".join(str(loc) for loc in error.get("loc", []) if loc != "body")
+            errors.append(f"{field}: {translated}" if field else translated)
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "; ".join(errors)},
+        )
 
     # Health check
     @application.get("/health")

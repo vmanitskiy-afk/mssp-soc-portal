@@ -200,7 +200,7 @@ async def get_me(
     service = AuthService(db)
     db_user = await service.get_user_by_id(user.user_id)
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
     return UserInfoResponse(
         id=str(db_user.id),

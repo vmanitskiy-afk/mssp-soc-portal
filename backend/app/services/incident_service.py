@@ -78,7 +78,7 @@ class IncidentService:
         - GET /api/v1/incidents/{id}/fullinfo
         """
         if not self.rusiem:
-            raise IncidentServiceError("RuSIEM client not configured", 500)
+            raise IncidentServiceError("Клиент RuSIEM не настроен", 500)
 
         try:
             incident = await self.rusiem.get_incident(rusiem_incident_id)
@@ -86,7 +86,7 @@ class IncidentService:
         except Exception as e:
             logger.error(f"Failed to fetch incident {rusiem_incident_id} from RuSIEM: {e}")
             raise IncidentServiceError(
-                f"Failed to fetch incident #{rusiem_incident_id} from RuSIEM: {str(e)}", 502
+                f"Ошибка получения инцидента #{rusiem_incident_id} из RuSIEM: {str(e)}", 502
             )
 
         return RuSIEMClient.map_incident_preview(incident, fullinfo)
@@ -114,7 +114,7 @@ class IncidentService:
         )
         tenant_obj = tenant.scalar_one_or_none()
         if not tenant_obj:
-            raise IncidentServiceError(f"Tenant {tenant_id} not found", 404)
+            raise IncidentServiceError(f"Клиент {tenant_id} не найден", 404)
 
         # Check if already published to this tenant
         existing = await self.db.execute(
@@ -125,7 +125,7 @@ class IncidentService:
         )
         if existing.scalar_one_or_none():
             raise IncidentServiceError(
-                f"Incident #{rusiem_incident_id} is already published to {tenant_obj.name}", 409
+                f"Инцидент #{rusiem_incident_id} уже опубликован для {tenant_obj.name}", 409
             )
 
         # Fetch and map from RuSIEM
@@ -224,7 +224,7 @@ class IncidentService:
 
         # Client can only comment on their own incidents
         if not is_soc and tenant_id and str(incident.tenant_id) != tenant_id:
-            raise IncidentServiceError("Access denied", 403)
+            raise IncidentServiceError("Доступ запрещён", 403)
 
         comment = IncidentComment(
             tenant_id=incident.tenant_id,
@@ -263,15 +263,15 @@ class IncidentService:
 
         # Client can only change status of their own incidents
         if not is_soc and tenant_id and str(incident.tenant_id) != tenant_id:
-            raise IncidentServiceError("Access denied", 403)
+            raise IncidentServiceError("Доступ запрещён", 403)
 
         # Validate transition
         transitions = SOC_TRANSITIONS if is_soc else CLIENT_TRANSITIONS
         allowed = transitions.get(incident.status, [])
         if new_status not in allowed:
             raise IncidentServiceError(
-                f"Cannot transition from '{incident.status}' to '{new_status}'. "
-                f"Allowed: {allowed}"
+                f"Нельзя перевести из '{incident.status}' в '{new_status}'. "
+                f"Допустимые: {allowed}"
             )
 
         old_status = incident.status
@@ -316,7 +316,7 @@ class IncidentService:
         incident = await self._get_incident(incident_id)
 
         if str(incident.tenant_id) != tenant_id:
-            raise IncidentServiceError("Access denied", 403)
+            raise IncidentServiceError("Доступ запрещён", 403)
 
         incident.client_response = client_response
         await self.db.flush()
@@ -399,11 +399,11 @@ class IncidentService:
         )
         incident = result.scalar_one_or_none()
         if not incident:
-            raise IncidentServiceError("Incident not found", 404)
+            raise IncidentServiceError("Инцидент не найден", 404)
 
         # Client can only view their own
         if tenant_id and str(incident.tenant_id) != tenant_id:
-            raise IncidentServiceError("Access denied", 403)
+            raise IncidentServiceError("Доступ запрещён", 403)
 
         return {
             "id": str(incident.id),
@@ -457,5 +457,5 @@ class IncidentService:
         )
         incident = result.scalar_one_or_none()
         if not incident:
-            raise IncidentServiceError("Incident not found", 404)
+            raise IncidentServiceError("Инцидент не найден", 404)
         return incident
