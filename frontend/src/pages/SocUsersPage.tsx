@@ -19,7 +19,9 @@ const ROLES = [
   { value: 'soc_admin', label: 'SOC Администратор', color: '#e74c3c' },
   { value: 'soc_analyst', label: 'SOC Аналитик', color: '#f39c12' },
   { value: 'client_admin', label: 'Клиент Админ', color: '#3498db' },
-  { value: 'client_user', label: 'Клиент', color: '#95a5a6' },
+  { value: 'client_security', label: 'Клиент Безопасник', color: '#2ecc71' },
+  { value: 'client_auditor', label: 'Клиент Аудитор', color: '#9b59b6' },
+  { value: 'client_readonly', label: 'Клиент (только чтение)', color: '#95a5a6' },
 ];
 
 function getRoleLabel(role: string) {
@@ -41,7 +43,7 @@ export default function SocUsersPage() {
     email: '',
     name: '',
     password: '',
-    role: 'client_user',
+    role: 'client_admin',
     tenant_id: '',
   });
   const [creating, setCreating] = useState(false);
@@ -89,7 +91,7 @@ export default function SocUsersPage() {
       if (form.tenant_id) payload.tenant_id = form.tenant_id;
       await api.post('/soc/users', payload);
       setSuccess(`Пользователь ${form.email} создан`);
-      setForm({ email: '', name: '', password: '', role: 'client_user', tenant_id: '' });
+      setForm({ email: '', name: '', password: '', role: 'client_admin', tenant_id: '' });
       setShowForm(false);
       fetchUsers();
     } catch (err: unknown) {
@@ -120,7 +122,7 @@ export default function SocUsersPage() {
     }
   };
 
-  const isClientRole = form.role === 'client_admin' || form.role === 'client_user';
+  const isClientRole = form.role.startsWith('client_');
 
   return (
     <div style={{ padding: '2rem', maxWidth: 1200, margin: '0 auto' }}>
