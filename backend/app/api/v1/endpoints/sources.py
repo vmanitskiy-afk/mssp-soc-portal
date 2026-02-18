@@ -1,16 +1,17 @@
 """
 Log sources endpoints — client view.
 
-/api/sources/ — list sources assigned to the client with status
+/api/sources/          — list sources with filters
+/api/sources/stats     — status statistics
+/api/sources/types     — distinct source types (for filter dropdown)
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.security import CurrentUser, RoleRequired
-from app.models.models import LogSource
+from app.services.log_source_service import LogSourceService
 
 router = APIRouter()
 
@@ -21,31 +22,47 @@ client_viewer = RoleRequired(
 
 @router.get("/")
 async def list_sources(
+    status: str | None = Query(None, description="Фильтр по статусу: active, degraded, no_logs, error, unknown"),
+    search: str | None = Query(None, description="Поиск по имени, хосту, вендору"),
+    source_type: str | None = Query(None, description="Фильтр по типу источника"),
     user: CurrentUser = Depends(client_viewer),
     db: AsyncSession = Depends(get_db),
 ):
     """List log sources assigned to the client's organization."""
     if not user.tenant_id:
-        raise HTTPException(status_code=403, detail="No tenant assigned")
+        raise HTTPException(status_code=403, detail="Нет привязки к организации")
 
-    result = await db.execute(
-        select(LogSource)
-        .where(LogSource.tenant_id == user.tenant_id, LogSource.is_active == True)  # noqa: E712
-        .order_by(LogSource.name)
+    service = LogSourceService(db)
+    return await service.list_for_tenant(
+        tenant_id=str(user.tenant_id),
+        status=status,
+        search=search,
+        source_type=source_type,
     )
-    sources = result.scalars().all()
 
-    return [
-        {
-            "id": str(s.id),
-            "name": s.name,
-            "source_type": s.source_type,
-            "host": s.host,
-            "vendor": s.vendor,
-            "product": s.product,
-            "status": s.status,
-            "last_event_at": s.last_event_at.isoformat() if s.last_event_at else None,
-            "eps": s.eps,
-        }
-        for s in sources
-    ]
+
+@router.get("/stats")
+async def source_stats(
+    user: CurrentUser = Depends(client_viewer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Source status statistics for the client dashboard widget."""
+    if not user.tenant_id:
+        raise HTTPException(status_code=403, detail="Нет привязки к организации")
+
+    service = LogSourceService(db)
+    return await service.get_stats(str(user.tenant_id))
+
+
+@router.get("/types")
+async def source_types(
+    user: CurrentUser = Depends(client_viewer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get distinct source types for filter dropdown."""
+    if not user.tenant_id:
+        raise HTTPException(status_code=403, detail="Нет привязки к организации")
+
+    service = LogSourceService(db)
+    types = await service.get_source_types(str(user.tenant_id))
+    return {"items": types}

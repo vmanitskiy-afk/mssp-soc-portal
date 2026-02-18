@@ -33,6 +33,10 @@ celery_app.conf.update(
             "task": "app.tasks.worker.calculate_sla",
             "schedule": crontab(minute=0),  # Every hour
         },
+        "source-status-sync": {
+            "task": "app.tasks.worker.sync_source_statuses",
+            "schedule": crontab(minute="*/5"),  # Every 5 minutes
+        },
     },
 )
 
@@ -212,3 +216,107 @@ def send_comment_email(
     )
     for email in to_emails:
         send_email(email, subject, body)
+
+
+# ── Source status sync task ───────────────────────────────────────
+
+@celery_app.task(name="app.tasks.worker.sync_source_statuses")
+def sync_source_statuses():
+    """Sync log source statuses from RuSIEM for all active tenants.
+
+    Runs every 5 minutes via Celery Beat.
+    For each tenant's sources, queries RuSIEM for recent events
+    and updates source statuses accordingly.
+
+    Status logic:
+    - active:   last event < 30 min ago
+    - degraded: last event 30 min–2 hours ago
+    - no_logs:  last event > 2 hours ago or never
+    """
+    import asyncio
+    asyncio.run(_sync_sources_async())
+
+
+async def _sync_sources_async():
+    from sqlalchemy import select
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import Tenant, LogSource
+    from app.services.log_source_service import LogSourceService
+    from app.integrations.rusiem.client import RuSIEMClient
+
+    import redis.asyncio as aioredis
+
+    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+
+    async with AsyncSessionLocal() as db:
+        # Get all active tenants
+        tenants = (await db.execute(
+            select(Tenant).where(Tenant.is_active == True)  # noqa: E712
+        )).scalars().all()
+
+        for tenant in tenants:
+            try:
+                # Get active sources for this tenant
+                sources = (await db.execute(
+                    select(LogSource).where(
+                        LogSource.tenant_id == tenant.id,
+                        LogSource.is_active == True,  # noqa: E712
+                    )
+                )).scalars().all()
+
+                if not sources:
+                    continue
+
+                rusiem = RuSIEMClient(
+                    base_url=settings.RUSIEM_API_URL,
+                    api_key=settings.RUSIEM_API_KEY,
+                    redis_client=redis_client,
+                    verify_ssl=settings.RUSIEM_VERIFY_SSL,
+                )
+
+                service = LogSourceService(db)
+                source_events = {}
+
+                for source in sources:
+                    try:
+                        events = await rusiem.search_events(
+                            query=f"source_ip:{source.host} OR event_source_ip:{source.host}",
+                            interval="2h",
+                            limit=1,
+                        )
+                        event_data = events.get("data", [])
+                        if event_data:
+                            ts = event_data[0].get("timestamp") or event_data[0].get("@timestamp")
+                            if ts:
+                                if isinstance(ts, str):
+                                    last_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                                else:
+                                    last_dt = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
+                                source_events[source.host] = last_dt
+                            else:
+                                source_events[source.host] = None
+                        else:
+                            source_events[source.host] = None
+                    except Exception as e:
+                        logger.warning(f"Source check failed for {source.host}: {e}")
+                        source_events[source.host] = None
+
+                updated = await service.update_statuses_for_tenant(
+                    str(tenant.id), source_events
+                )
+
+                await rusiem.close()
+
+                if updated > 0:
+                    logger.info(
+                        f"Source sync {tenant.short_name}: "
+                        f"{len(sources)} checked, {updated} updated"
+                    )
+
+            except Exception as e:
+                logger.error(f"Source sync failed for tenant {tenant.id}: {e}")
+
+        await db.commit()
+
+    await redis_client.close()
+    logger.info("Source status sync complete")

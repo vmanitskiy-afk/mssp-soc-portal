@@ -10,6 +10,8 @@ SOC Operator endpoints — real implementation.
 /api/soc/tenants                 — tenant management
 """
 
+import logging
+
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, EmailStr
@@ -21,9 +23,11 @@ from app.integrations.rusiem.client import RuSIEMClient
 from app.core.config import get_settings
 from app.services.incident_service import IncidentService, IncidentServiceError
 from app.services.user_service import UserService, UserServiceError
+from app.services.log_source_service import LogSourceService, LogSourceServiceError
 
 router = APIRouter()
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 soc_only = RoleRequired("soc_admin", "soc_analyst")
 admin_only = RoleRequired("soc_admin")
@@ -57,6 +61,25 @@ class CreateUserRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     new_password: str
+
+
+class CreateSourceRequest(BaseModel):
+    tenant_id: str
+    name: str
+    source_type: str
+    host: str
+    vendor: str | None = None
+    product: str | None = None
+    rusiem_group_name: str | None = None
+
+
+class UpdateSourceRequest(BaseModel):
+    name: str | None = None
+    source_type: str | None = None
+    host: str | None = None
+    vendor: str | None = None
+    product: str | None = None
+    rusiem_group_name: str | None = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -337,3 +360,172 @@ async def reset_user_password(
         return await service.reset_password(user_id, body.new_password, user.user_id)
     except UserServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Log Source Management (SOC)
+# ══════════════════════════════════════════════════════════════════
+
+@router.get("/sources")
+async def list_all_sources(
+    tenant_id: str | None = Query(None),
+    status: str | None = Query(None),
+    search: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    user: CurrentUser = Depends(soc_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all log sources across tenants (SOC view)."""
+    service = LogSourceService(db)
+    return await service.list_all(
+        tenant_id=tenant_id, status=status, search=search,
+        page=page, per_page=per_page,
+    )
+
+
+@router.post("/sources")
+async def create_source(
+    body: CreateSourceRequest,
+    user: CurrentUser = Depends(soc_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add a new log source to a client's organization."""
+    service = LogSourceService(db)
+    try:
+        source = await service.create(
+            tenant_id=body.tenant_id,
+            name=body.name,
+            source_type=body.source_type,
+            host=body.host,
+            vendor=body.vendor,
+            product=body.product,
+            rusiem_group_name=body.rusiem_group_name,
+        )
+    except LogSourceServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    return {
+        "id": str(source.id),
+        "name": source.name,
+        "host": source.host,
+        "status": source.status,
+    }
+
+
+@router.put("/sources/{source_id}")
+async def update_source(
+    body: UpdateSourceRequest,
+    source_id: str = Path(...),
+    user: CurrentUser = Depends(soc_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update an existing log source."""
+    service = LogSourceService(db)
+    try:
+        source = await service.update_source(
+            source_id=source_id,
+            **body.model_dump(exclude_none=True),
+        )
+    except LogSourceServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    return {"ok": True, "id": str(source.id), "name": source.name}
+
+
+@router.delete("/sources/{source_id}")
+async def delete_source(
+    source_id: str = Path(...),
+    user: CurrentUser = Depends(soc_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Soft-delete a log source."""
+    service = LogSourceService(db)
+    try:
+        return await service.delete_source(source_id)
+    except LogSourceServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+
+@router.post("/sources/sync")
+async def trigger_source_sync(
+    tenant_id: str | None = Query(None, description="Sync specific tenant, or all if empty"),
+    user: CurrentUser = Depends(soc_only),
+    redis_client: aioredis.Redis = Depends(get_redis),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually trigger source status sync from RuSIEM.
+
+    Queries RuSIEM for recent events per source host, updates statuses.
+    """
+    from app.services.log_source_service import LogSourceService
+    from sqlalchemy import select
+    from app.models.models import Tenant, LogSource
+    from datetime import datetime, timezone
+
+    rusiem = await _get_rusiem(redis_client)
+    service = LogSourceService(db)
+    results = []
+
+    try:
+        # Get tenants to sync
+        if tenant_id:
+            tenants_query = select(Tenant).where(Tenant.id == tenant_id, Tenant.is_active == True)  # noqa: E712
+        else:
+            tenants_query = select(Tenant).where(Tenant.is_active == True)  # noqa: E712
+
+        tenants = (await db.execute(tenants_query)).scalars().all()
+
+        for tenant in tenants:
+            # Get all active sources for this tenant
+            sources = (await db.execute(
+                select(LogSource).where(
+                    LogSource.tenant_id == tenant.id,
+                    LogSource.is_active == True,  # noqa: E712
+                )
+            )).scalars().all()
+
+            if not sources:
+                continue
+
+            source_events: dict[str, datetime | None] = {}
+
+            for source in sources:
+                try:
+                    # Search recent events from this source host in RuSIEM
+                    events = await rusiem.search_events(
+                        query=f"source_ip:{source.host} OR event_source_ip:{source.host}",
+                        interval="2h",
+                        limit=1,
+                    )
+                    event_data = events.get("data", [])
+                    if event_data and len(event_data) > 0:
+                        # Get timestamp of most recent event
+                        ts = event_data[0].get("timestamp") or event_data[0].get("@timestamp")
+                        if ts:
+                            if isinstance(ts, str):
+                                last_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                            else:
+                                last_dt = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
+                            source_events[source.host] = last_dt
+                        else:
+                            source_events[source.host] = None
+                    else:
+                        source_events[source.host] = None
+                except Exception as e:
+                    logger.warning(f"Failed to check source {source.host}: {e}")
+                    source_events[source.host] = None
+
+            updated = await service.update_statuses_for_tenant(
+                str(tenant.id), source_events
+            )
+            results.append({
+                "tenant": tenant.short_name,
+                "sources_checked": len(sources),
+                "sources_updated": updated,
+            })
+
+    finally:
+        await rusiem.close()
+
+    return {"ok": True, "results": results}

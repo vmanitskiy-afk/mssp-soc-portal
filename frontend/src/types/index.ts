@@ -138,9 +138,11 @@ export interface LogSource {
   host: string;
   vendor: string | null;
   product: string | null;
+  rusiem_group_name: string | null;
   status: string;
   last_event_at: string | null;
   eps: number | null;
+  created_at: string | null;
 }
 
 // ── Notifications ────────────────────────────────────────────────
