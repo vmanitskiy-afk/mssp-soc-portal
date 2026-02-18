@@ -70,6 +70,22 @@ async def incidents_chart(
     return await service.get_incidents_chart(tid, days=_parse_period(period))
 
 
+@router.get("/sla-history")
+async def sla_history(
+    period: str = Query("90d", pattern=r"^\d+[dwm]$"),
+    tenant_id: str | None = Query(None),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """SLA trend data: MTTA, MTTR, compliance over time."""
+    tid = _resolve_tenant(user, tenant_id)
+    if not tid and user.role not in ("soc_admin", "soc_analyst"):
+        raise HTTPException(status_code=403, detail="Нет привязки к клиенту")
+
+    service = DashboardService(db)
+    return await service.get_sla_history(tid, days=_parse_period(period))
+
+
 @router.get("/sla")
 async def sla_metrics(
     period: str = Query("30d", pattern=r"^\d+[dwm]$"),

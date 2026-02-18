@@ -13,7 +13,7 @@ from io import BytesIO
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import PublishedIncident, Tenant, IncidentComment, IncidentStatusChange
+from app.models.models import PublishedIncident, Tenant, IncidentComment, IncidentStatusChange, SlaSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,19 @@ class ReportService:
                 stats["by_status"].get(inc.status, 0) + 1
             )
 
-        html = self._render_monthly_html(tenant, incidents, stats, dt_from, dt_to)
+        # Get latest SLA snapshot for the report
+        result = await self.db.execute(
+            select(SlaSnapshot)
+            .where(
+                SlaSnapshot.tenant_id == tenant_id,
+                SlaSnapshot.period_end >= dt_from,
+            )
+            .order_by(SlaSnapshot.period_end.desc())
+            .limit(1)
+        )
+        sla_snapshot = result.scalar_one_or_none()
+
+        html = self._render_monthly_html(tenant, incidents, stats, dt_from, dt_to, sla_snapshot)
         return self._html_to_pdf(html)
 
     async def generate_incident_report(
@@ -128,6 +140,102 @@ class ReportService:
         history = result.scalars().all()
 
         html = self._render_incident_html(tenant, incident, comments, history)
+        return self._html_to_pdf(html)
+
+    async def generate_sla_report(
+        self, tenant_id: str, period_from: str, period_to: str
+    ) -> bytes:
+        """Generate SLA report PDF with MTTA/MTTR metrics."""
+        try:
+            dt_from = datetime.fromisoformat(period_from).replace(tzinfo=timezone.utc)
+            dt_to = datetime.fromisoformat(period_to).replace(
+                hour=23, minute=59, second=59, tzinfo=timezone.utc
+            )
+        except ValueError:
+            raise ReportServiceError("Неверный формат даты. Используйте YYYY-MM-DD")
+
+        # Get tenant
+        result = await self.db.execute(select(Tenant).where(Tenant.id == tenant_id))
+        tenant = result.scalar_one_or_none()
+        if not tenant:
+            raise ReportServiceError("Клиент не найден", 404)
+
+        # Get all incidents for period
+        result = await self.db.execute(
+            select(PublishedIncident)
+            .where(
+                PublishedIncident.tenant_id == tenant_id,
+                PublishedIncident.published_at >= dt_from,
+                PublishedIncident.published_at <= dt_to,
+            )
+            .order_by(PublishedIncident.published_at.desc())
+        )
+        incidents = result.scalars().all()
+
+        # Get SLA snapshots for period
+        result = await self.db.execute(
+            select(SlaSnapshot)
+            .where(
+                SlaSnapshot.tenant_id == tenant_id,
+                SlaSnapshot.period_end >= dt_from,
+                SlaSnapshot.period_end <= dt_to,
+            )
+            .order_by(SlaSnapshot.period_end.desc())
+            .limit(1)
+        )
+        latest_snapshot = result.scalar_one_or_none()
+
+        # Calculate MTTA/MTTR per priority from incidents
+        from app.models.models import IncidentStatusChange as ISC
+        priority_metrics: dict[str, dict] = {}
+        for p in ["critical", "high", "medium", "low"]:
+            p_incs = [i for i in incidents if i.priority == p]
+            mtta_vals = []
+            mttr_vals = []
+            for inc in p_incs:
+                # MTTA
+                first_ack = await self.db.execute(
+                    select(ISC.created_at).where(
+                        ISC.incident_id == inc.id,
+                        ISC.new_status == "in_progress",
+                    ).order_by(ISC.created_at).limit(1)
+                )
+                ack_time = first_ack.scalar_one_or_none()
+                if ack_time and inc.published_at:
+                    mtta_vals.append((ack_time - inc.published_at).total_seconds() / 60)
+                # MTTR
+                if inc.closed_at and inc.published_at:
+                    mttr_vals.append((inc.closed_at - inc.published_at).total_seconds() / 60)
+
+            priority_metrics[p] = {
+                "total": len(p_incs),
+                "closed": len([i for i in p_incs if i.status in ("closed", "resolved")]),
+                "avg_mtta": round(sum(mtta_vals) / len(mtta_vals), 1) if mtta_vals else None,
+                "avg_mttr": round(sum(mttr_vals) / len(mttr_vals), 1) if mttr_vals else None,
+            }
+
+        # SLA targets
+        sla_config = tenant.sla_config or {}
+        sla_targets = sla_config.get("mttr_targets", {
+            "critical": 240, "high": 1440, "medium": 4320, "low": 10080,
+        })
+
+        # Compliance calculation
+        compliant = 0
+        total_closed = 0
+        for inc in incidents:
+            if inc.closed_at and inc.published_at:
+                mttr_min = (inc.closed_at - inc.published_at).total_seconds() / 60
+                target = sla_targets.get(inc.priority, 10080)
+                total_closed += 1
+                if mttr_min <= target:
+                    compliant += 1
+        compliance_pct = round(compliant / total_closed * 100, 1) if total_closed else None
+
+        html = self._render_sla_html(
+            tenant, incidents, priority_metrics, sla_targets,
+            compliance_pct, latest_snapshot, dt_from, dt_to,
+        )
         return self._html_to_pdf(html)
 
     def _html_to_pdf(self, html_content: str) -> bytes:
@@ -201,7 +309,7 @@ class ReportService:
         }
         """
 
-    def _render_monthly_html(self, tenant, incidents, stats, dt_from, dt_to) -> str:
+    def _render_monthly_html(self, tenant, incidents, stats, dt_from, dt_to, sla_snapshot=None) -> str:
         period_str = f"{dt_from.strftime('%d.%m.%Y')} — {dt_to.strftime('%d.%m.%Y')}"
         now = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
 
@@ -270,6 +378,24 @@ class ReportService:
             <tr><th>Статус</th><th style="text-align:right">Количество</th></tr>
             {status_rows}
         </table>
+    </div>
+
+    <div class="section">
+        <h2>Метрики SLA</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="number">{f"{sla_snapshot.mtta_minutes} мин" if sla_snapshot and sla_snapshot.mtta_minutes else "—"}</div>
+                <div class="label">MTTA (ср. реакция)</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{f"{sla_snapshot.mttr_minutes} мин" if sla_snapshot and sla_snapshot.mttr_minutes else "—"}</div>
+                <div class="label">MTTR (ср. решение)</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" style="color:{'#22c55e' if sla_snapshot and sla_snapshot.sla_compliance_pct and sla_snapshot.sla_compliance_pct >= 95 else '#eab308'}">{f"{sla_snapshot.sla_compliance_pct}%" if sla_snapshot and sla_snapshot.sla_compliance_pct else "—"}</div>
+                <div class="label">SLA Compliance</div>
+            </div>
+        </div>
     </div>
 
     <div class="section">
@@ -362,5 +488,172 @@ class ReportService:
 
     <div class="footer">
         MSSP SOC Portal • {tenant.name if tenant else ''} • Конфиденциально • {now}
+    </div>
+</body></html>"""
+
+    def _render_sla_html(
+        self, tenant, incidents, priority_metrics, sla_targets,
+        compliance_pct, snapshot, dt_from, dt_to,
+    ) -> str:
+        period_str = f"{dt_from.strftime('%d.%m.%Y')} — {dt_to.strftime('%d.%m.%Y')}"
+        now = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+
+        total = len(incidents)
+
+        # SLA target labels
+        def fmt_target(minutes: int) -> str:
+            if minutes < 60:
+                return f"{minutes} мин"
+            if minutes < 1440:
+                return f"{minutes // 60} ч"
+            return f"{minutes // 1440} дн"
+
+        # Priority rows
+        priority_rows = ""
+        priority_labels = {"critical": "Critical", "high": "High", "medium": "Medium", "low": "Low"}
+        for p in ["critical", "high", "medium", "low"]:
+            m = priority_metrics.get(p, {})
+            color = PRIORITY_COLORS.get(p, "#6b7280")
+            target = sla_targets.get(p, 0)
+            mtta_str = f"{m['avg_mtta']} мин" if m.get('avg_mtta') else "—"
+            mttr_str = f"{m['avg_mttr']:.0f} мин" if m.get('avg_mttr') else "—"
+            # Compliance per priority
+            p_compliant = 0
+            p_total = 0
+            for inc in incidents:
+                if inc.priority == p and inc.closed_at and inc.published_at:
+                    mttr_min = (inc.closed_at - inc.published_at).total_seconds() / 60
+                    p_total += 1
+                    if mttr_min <= target:
+                        p_compliant += 1
+            p_pct = f"{round(p_compliant / p_total * 100)}%" if p_total else "—"
+
+            priority_rows += f"""
+            <tr>
+                <td><span class="badge" style="background:{color}">{priority_labels[p]}</span></td>
+                <td style="text-align:center">{m.get('total', 0)}</td>
+                <td style="text-align:center">{m.get('closed', 0)}</td>
+                <td style="text-align:center">{mtta_str}</td>
+                <td style="text-align:center">{mttr_str}</td>
+                <td style="text-align:center">{fmt_target(target)}</td>
+                <td style="text-align:center;font-weight:600">{p_pct}</td>
+            </tr>"""
+
+        # Overall metrics
+        mtta_overall = snapshot.mtta_minutes if snapshot else None
+        mttr_overall = snapshot.mttr_minutes if snapshot else None
+        mtta_str = f"{mtta_overall} мин" if mtta_overall else "—"
+        mttr_str = f"{mttr_overall} мин" if mttr_overall else "—"
+        compliance_str = f"{compliance_pct}%" if compliance_pct is not None else "—"
+        compliance_color = "#22c55e" if compliance_pct and compliance_pct >= 95 else "#eab308" if compliance_pct and compliance_pct >= 80 else "#ef4444"
+
+        # Incidents table (top 20)
+        inc_rows = ""
+        for inc in incidents[:20]:
+            color = PRIORITY_COLORS.get(inc.priority, "#6b7280")
+            status_label = STATUS_LABELS.get(inc.status, inc.status)
+            pub_date = inc.published_at.strftime("%d.%m.%Y") if inc.published_at else "—"
+            close_date = inc.closed_at.strftime("%d.%m.%Y") if inc.closed_at else "—"
+            if inc.closed_at and inc.published_at:
+                mttr_min = (inc.closed_at - inc.published_at).total_seconds() / 60
+                target = sla_targets.get(inc.priority, 10080)
+                sla_ok = "✓" if mttr_min <= target else "✗"
+                sla_color = "#22c55e" if mttr_min <= target else "#ef4444"
+                mttr_display = f"{mttr_min:.0f} мин"
+            else:
+                sla_ok = "—"
+                sla_color = "#6b7280"
+                mttr_display = "—"
+            inc_rows += f"""
+            <tr>
+                <td>#{inc.rusiem_incident_id}</td>
+                <td>{inc.title[:60]}</td>
+                <td><span class="badge" style="background:{color}">{inc.priority}</span></td>
+                <td>{status_label}</td>
+                <td>{pub_date}</td>
+                <td>{close_date}</td>
+                <td style="text-align:center">{mttr_display}</td>
+                <td style="text-align:center;color:{sla_color};font-weight:700">{sla_ok}</td>
+            </tr>"""
+
+        remaining = len(incidents) - 20
+        if remaining > 0:
+            inc_rows += f'<tr><td colspan="8" style="text-align:center;color:#64748b;font-style:italic">...и ещё {remaining} инцидентов</td></tr>'
+
+        return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>{self._base_css()}</style></head>
+<body>
+    <div class="header">
+        <div>
+            <h1>Отчёт SLA — {tenant.name}</h1>
+            <div class="meta">Период: {period_str}</div>
+        </div>
+        <div style="text-align:right">
+            <div style="font-size:12px;font-weight:600">MSSP SOC Portal</div>
+            <div class="meta">Сформирован: {now}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Ключевые метрики SLA</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="number">{total}</div>
+                <div class="label">Всего инцидентов</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{mtta_str}</div>
+                <div class="label">MTTA (ср. время реакции)</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{mttr_str}</div>
+                <div class="label">MTTR (ср. время решения)</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" style="color:{compliance_color}">{compliance_str}</div>
+                <div class="label">SLA Compliance</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Метрики по приоритету</h2>
+        <table>
+            <tr>
+                <th>Приоритет</th><th style="text-align:center">Всего</th>
+                <th style="text-align:center">Закрыто</th><th style="text-align:center">Ср. MTTA</th>
+                <th style="text-align:center">Ср. MTTR</th><th style="text-align:center">Целевой MTTR</th>
+                <th style="text-align:center">SLA %</th>
+            </tr>
+            {priority_rows}
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>SLA целевые значения</h2>
+        <p style="font-size:10px;color:#475569">
+            Целевое время решения (MTTR) по приоритетам:
+            Critical — {fmt_target(sla_targets.get('critical', 240))},
+            High — {fmt_target(sla_targets.get('high', 1440))},
+            Medium — {fmt_target(sla_targets.get('medium', 4320))},
+            Low — {fmt_target(sla_targets.get('low', 10080))}.
+            Целевой уровень SLA Compliance: ≥ 95%.
+        </p>
+    </div>
+
+    <div class="section">
+        <h2>Детализация инцидентов</h2>
+        <table>
+            <tr>
+                <th>ID</th><th>Название</th><th>Приоритет</th><th>Статус</th>
+                <th>Открыт</th><th>Закрыт</th><th style="text-align:center">MTTR</th>
+                <th style="text-align:center">SLA</th>
+            </tr>
+            {inc_rows}
+        </table>
+    </div>
+
+    <div class="footer">
+        MSSP SOC Portal • {tenant.name} • SLA Report • Конфиденциально • {now}
     </div>
 </body></html>"""

@@ -93,6 +93,37 @@ class DashboardService:
             "period_end": snapshot.period_end.isoformat() if snapshot.period_end else None,
         }
 
+    async def get_sla_history(self, tenant_id: str | None, days: int = 90) -> list[dict]:
+        """SLA trend: snapshots over time for charts."""
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+
+        query = (
+            select(SlaSnapshot)
+            .where(SlaSnapshot.period_start >= since)
+        )
+        if tenant_id:
+            query = query.where(SlaSnapshot.tenant_id == tenant_id)
+
+        query = query.order_by(SlaSnapshot.period_end.asc())
+        result = await self.db.execute(query)
+        snapshots = result.scalars().all()
+
+        # Deduplicate by date (keep latest per day)
+        by_date: dict[str, dict] = {}
+        for s in snapshots:
+            d = s.period_end.strftime("%Y-%m-%d") if s.period_end else None
+            if not d:
+                continue
+            by_date[d] = {
+                "date": d,
+                "mtta_minutes": s.mtta_minutes,
+                "mttr_minutes": s.mttr_minutes,
+                "compliance_pct": s.sla_compliance_pct,
+                "incidents_total": s.incidents_total,
+            }
+
+        return list(by_date.values())
+
     # ── Private ───────────────────────────────────────────────────
 
     async def _incident_stats(self, tenant_id: str | None) -> dict:
