@@ -1,4 +1,7 @@
-"""Seed a demo tenant with RuSIEM connection."""
+"""Seed a demo tenant with RuSIEM connection.
+
+Usage: python -m app.scripts.seed_tenant <name> <short_name> [rusiem_url] [rusiem_key] [email]
+"""
 import asyncio
 import sys
 import os
@@ -11,18 +14,18 @@ from app.models.models import Tenant
 
 
 async def create_tenant():
-    name = input("Tenant name (e.g. IDS): ").strip()
-    short_name = input("Short name (e.g. ids): ").strip()
-    rusiem_url = input(f"RuSIEM URL [{os.getenv('RUSIEM_API_URL', 'https://172.16.177.216')}]: ").strip()
-    if not rusiem_url:
-        rusiem_url = os.getenv("RUSIEM_API_URL", "https://172.16.177.216")
-    rusiem_key = input(f"RuSIEM API key [{os.getenv('RUSIEM_API_KEY', '')}]: ").strip()
-    if not rusiem_key:
-        rusiem_key = os.getenv("RUSIEM_API_KEY", "")
-    contact_email = input("Contact email (optional): ").strip() or None
+    if len(sys.argv) < 3:
+        print("Usage: python -m app.scripts.seed_tenant <name> <short_name> [rusiem_url] [rusiem_key] [email]")
+        print("Example: python -m app.scripts.seed_tenant IDS ids")
+        sys.exit(1)
+
+    name = sys.argv[1]
+    short_name = sys.argv[2]
+    rusiem_url = sys.argv[3] if len(sys.argv) > 3 else os.getenv("RUSIEM_API_URL", "https://172.16.177.216")
+    rusiem_key = sys.argv[4] if len(sys.argv) > 4 else os.getenv("RUSIEM_API_KEY", "")
+    contact_email = sys.argv[5] if len(sys.argv) > 5 else None
 
     async with AsyncSessionLocal() as db:
-        # Check if tenant exists
         result = await db.execute(select(Tenant).where(Tenant.short_name == short_name))
         existing = result.scalar_one_or_none()
         if existing:
@@ -40,10 +43,7 @@ async def create_tenant():
         db.add(tenant)
         await db.commit()
         await db.refresh(tenant)
-        print(f"\n✅ Tenant created!")
-        print(f"   ID: {tenant.id}")
-        print(f"   Name: {tenant.name}")
-        print(f"   RuSIEM: {rusiem_url}")
+        print(f"Tenant created! ID: {tenant.id} | Name: {tenant.name} | RuSIEM: {rusiem_url}")
 
 
 if __name__ == "__main__":
