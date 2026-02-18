@@ -1,5 +1,5 @@
 """
-Dashboard endpoints — client facing.
+Dashboard endpoints — client and SOC facing.
 
 /api/dashboard/summary            — main dashboard data
 /api/dashboard/incidents-chart    — incidents by priority over time
@@ -11,14 +11,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
-from app.core.security import CurrentUser, RoleRequired
+from app.core.security import CurrentUser
 from app.services.dashboard_service import DashboardService
 
 router = APIRouter()
-
-client_viewer = RoleRequired(
-    "client_admin", "client_security", "client_auditor", "client_readonly"
-)
 
 
 def _parse_period(period: str) -> int:
@@ -36,42 +32,55 @@ def _parse_period(period: str) -> int:
     return 7
 
 
+def _resolve_tenant(user: CurrentUser, tenant_id: str | None) -> str | None:
+    """Resolve tenant_id: SOC can pass explicit, client uses own."""
+    if user.role in ("soc_admin", "soc_analyst"):
+        return tenant_id  # SOC can view any tenant or None for all
+    return user.tenant_id  # client always uses own
+
+
 @router.get("/summary")
 async def dashboard_summary(
-    user: CurrentUser = Depends(client_viewer),
+    tenant_id: str | None = Query(None),
+    user: CurrentUser = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
     """Main dashboard: incident stats, SLA, source status."""
-    if not user.tenant_id:
-        raise HTTPException(status_code=403, detail="No tenant assigned")
+    tid = _resolve_tenant(user, tenant_id)
+    if not tid and user.role not in ("soc_admin", "soc_analyst"):
+        raise HTTPException(status_code=403, detail="Нет привязки к клиенту")
 
     service = DashboardService(db)
-    return await service.get_summary(user.tenant_id)
+    return await service.get_summary(tid)
 
 
 @router.get("/incidents-chart")
 async def incidents_chart(
     period: str = Query("7d", pattern=r"^\d+[dwm]$"),
-    user: CurrentUser = Depends(client_viewer),
+    tenant_id: str | None = Query(None),
+    user: CurrentUser = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
     """Incidents by priority over time for chart rendering."""
-    if not user.tenant_id:
-        raise HTTPException(status_code=403, detail="No tenant assigned")
+    tid = _resolve_tenant(user, tenant_id)
+    if not tid and user.role not in ("soc_admin", "soc_analyst"):
+        raise HTTPException(status_code=403, detail="Нет привязки к клиенту")
 
     service = DashboardService(db)
-    return await service.get_incidents_chart(user.tenant_id, days=_parse_period(period))
+    return await service.get_incidents_chart(tid, days=_parse_period(period))
 
 
 @router.get("/sla")
 async def sla_metrics(
     period: str = Query("30d", pattern=r"^\d+[dwm]$"),
-    user: CurrentUser = Depends(client_viewer),
+    tenant_id: str | None = Query(None),
+    user: CurrentUser = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
     """SLA metrics: MTTA, MTTR, compliance by priority."""
-    if not user.tenant_id:
-        raise HTTPException(status_code=403, detail="No tenant assigned")
+    tid = _resolve_tenant(user, tenant_id)
+    if not tid and user.role not in ("soc_admin", "soc_analyst"):
+        raise HTTPException(status_code=403, detail="Нет привязки к клиенту")
 
     service = DashboardService(db)
-    return await service.get_sla_metrics(user.tenant_id, days=_parse_period(period))
+    return await service.get_sla_metrics(tid, days=_parse_period(period))

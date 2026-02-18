@@ -22,7 +22,7 @@ class DashboardService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_summary(self, tenant_id: str) -> dict:
+    async def get_summary(self, tenant_id: str | None) -> dict:
         """Main dashboard summary: incidents, SLA, sources."""
         incidents = await self._incident_stats(tenant_id)
         sla = await self._latest_sla(tenant_id)
@@ -34,23 +34,26 @@ class DashboardService:
             "sources": sources,
         }
 
-    async def get_incidents_chart(self, tenant_id: str, days: int = 7) -> list[dict]:
+    async def get_incidents_chart(self, tenant_id: str | None, days: int = 7) -> list[dict]:
         """Incidents by priority grouped by date for chart."""
         since = datetime.now(timezone.utc) - timedelta(days=days)
 
-        result = await self.db.execute(
+        query = (
             select(
                 func.date(PublishedIncident.published_at).label("date"),
                 PublishedIncident.priority,
                 func.count().label("count"),
             )
-            .where(
-                PublishedIncident.tenant_id == tenant_id,
-                PublishedIncident.published_at >= since,
-            )
-            .group_by(func.date(PublishedIncident.published_at), PublishedIncident.priority)
-            .order_by(func.date(PublishedIncident.published_at))
+            .where(PublishedIncident.published_at >= since)
         )
+        if tenant_id:
+            query = query.where(PublishedIncident.tenant_id == tenant_id)
+
+        query = query.group_by(
+            func.date(PublishedIncident.published_at), PublishedIncident.priority
+        ).order_by(func.date(PublishedIncident.published_at))
+
+        result = await self.db.execute(query)
         rows = result.all()
 
         # Pivot: group by date, columns = priorities
@@ -63,7 +66,7 @@ class DashboardService:
 
         return list(chart.values())
 
-    async def get_sla_metrics(self, tenant_id: str, days: int = 30) -> dict:
+    async def get_sla_metrics(self, tenant_id: str | None, days: int = 30) -> dict:
         """SLA metrics for a period."""
         since = datetime.now(timezone.utc) - timedelta(days=days)
 
@@ -92,24 +95,25 @@ class DashboardService:
 
     # ── Private ───────────────────────────────────────────────────
 
-    async def _incident_stats(self, tenant_id: str) -> dict:
+    async def _incident_stats(self, tenant_id: str | None) -> dict:
         """Incident counts by status and priority."""
-        result = await self.db.execute(
-            select(
-                func.count().label("total"),
-                func.count().filter(PublishedIncident.status.notin_(["closed", "false_positive"])).label("open"),
-                func.count().filter(PublishedIncident.priority == "critical").label("critical"),
-                func.count().filter(PublishedIncident.priority == "high").label("high"),
-                func.count().filter(PublishedIncident.priority == "medium").label("medium"),
-                func.count().filter(PublishedIncident.priority == "low").label("low"),
-                func.count().filter(PublishedIncident.status == "new").label("new"),
-                func.count().filter(PublishedIncident.status == "in_progress").label("in_progress"),
-                func.count().filter(PublishedIncident.status == "awaiting_customer").label("awaiting_customer"),
-                func.count().filter(PublishedIncident.status == "resolved").label("resolved"),
-                func.count().filter(PublishedIncident.status == "closed").label("closed"),
-            )
-            .where(PublishedIncident.tenant_id == tenant_id)
+        query = select(
+            func.count().label("total"),
+            func.count().filter(PublishedIncident.status.notin_(["closed", "false_positive"])).label("open"),
+            func.count().filter(PublishedIncident.priority == "critical").label("critical"),
+            func.count().filter(PublishedIncident.priority == "high").label("high"),
+            func.count().filter(PublishedIncident.priority == "medium").label("medium"),
+            func.count().filter(PublishedIncident.priority == "low").label("low"),
+            func.count().filter(PublishedIncident.status == "new").label("new"),
+            func.count().filter(PublishedIncident.status == "in_progress").label("in_progress"),
+            func.count().filter(PublishedIncident.status == "awaiting_customer").label("awaiting_customer"),
+            func.count().filter(PublishedIncident.status == "resolved").label("resolved"),
+            func.count().filter(PublishedIncident.status == "closed").label("closed"),
         )
+        if tenant_id:
+            query = query.where(PublishedIncident.tenant_id == tenant_id)
+
+        result = await self.db.execute(query)
         row = result.one()
 
         return {
@@ -130,18 +134,19 @@ class DashboardService:
             },
         }
 
-    async def _source_stats(self, tenant_id: str) -> dict:
+    async def _source_stats(self, tenant_id: str | None) -> dict:
         """Log source status summary."""
-        result = await self.db.execute(
-            select(
-                func.count().label("total"),
-                func.count().filter(LogSource.status == "active").label("active"),
-                func.count().filter(LogSource.status == "degraded").label("degraded"),
-                func.count().filter(LogSource.status == "no_logs").label("no_logs"),
-                func.count().filter(LogSource.status == "error").label("error"),
-            )
-            .where(LogSource.tenant_id == tenant_id, LogSource.is_active == True)  # noqa: E712
-        )
+        query = select(
+            func.count().label("total"),
+            func.count().filter(LogSource.status == "active").label("active"),
+            func.count().filter(LogSource.status == "degraded").label("degraded"),
+            func.count().filter(LogSource.status == "no_logs").label("no_logs"),
+            func.count().filter(LogSource.status == "error").label("error"),
+        ).where(LogSource.is_active == True)  # noqa: E712
+        if tenant_id:
+            query = query.where(LogSource.tenant_id == tenant_id)
+
+        result = await self.db.execute(query)
         row = result.one()
 
         return {
@@ -152,7 +157,10 @@ class DashboardService:
             "error": row.error,
         }
 
-    async def _latest_sla(self, tenant_id: str) -> dict:
+    async def _latest_sla(self, tenant_id: str | None) -> dict:
+        if not tenant_id:
+            return {"mtta_minutes": None, "mttr_minutes": None, "compliance_pct": None}
+
         result = await self.db.execute(
             select(SlaSnapshot)
             .where(SlaSnapshot.tenant_id == tenant_id)
