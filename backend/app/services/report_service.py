@@ -12,7 +12,6 @@ from io import BytesIO
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from weasyprint import HTML
 
 from app.models.models import PublishedIncident, Tenant, IncidentComment, IncidentStatusChange
 
@@ -133,6 +132,7 @@ class ReportService:
 
     def _html_to_pdf(self, html_content: str) -> bytes:
         """Convert HTML to PDF bytes."""
+        from weasyprint import HTML
         buf = BytesIO()
         HTML(string=html_content).write_pdf(buf)
         return buf.getvalue()
