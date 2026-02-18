@@ -18,19 +18,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # ── Enums ─────────────────────────────────────────────────
+    op.execute("CREATE TYPE incident_status AS ENUM ('new', 'in_progress', 'awaiting_customer', 'awaiting_soc', 'resolved', 'closed', 'false_positive')")
+    op.execute("CREATE TYPE user_role AS ENUM ('soc_admin', 'soc_analyst', 'client_admin', 'client_security', 'client_auditor', 'client_readonly')")
+
+    # References for column types (don't re-create)
     incident_status = postgresql.ENUM(
         "new", "in_progress", "awaiting_customer", "awaiting_soc",
         "resolved", "closed", "false_positive",
-        name="incident_status", create_type=True,
+        name="incident_status", create_type=False,
     )
-    incident_status.create(op.get_bind(), checkfirst=True)
-
     user_role = postgresql.ENUM(
         "soc_admin", "soc_analyst",
         "client_admin", "client_security", "client_auditor", "client_readonly",
-        name="user_role", create_type=True,
+        name="user_role", create_type=False,
     )
-    user_role.create(op.get_bind(), checkfirst=True)
 
     # ── Tenants ───────────────────────────────────────────────
     op.create_table(
