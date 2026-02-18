@@ -82,7 +82,7 @@ async def list_tenants(
     from app.models.models import Tenant
 
     result = await db.execute(
-        select(Tenant).where(Tenant.is_active == True).order_by(Tenant.name)
+        select(Tenant).where(Tenant.is_active == True).order_by(Tenant.name)  # noqa: E712
     )
     tenants = result.scalars().all()
     return {
