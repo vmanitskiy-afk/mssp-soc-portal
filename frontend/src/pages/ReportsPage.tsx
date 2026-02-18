@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   FileText, Download, Calendar, Loader2, TrendingUp, Clock,
-  Shield, BarChart3, FileSpreadsheet, ChevronDown, Building2,
+  Shield, BarChart3, FileSpreadsheet, ChevronDown, Users,
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -201,7 +201,7 @@ export default function ReportsPage() {
         <div className="flex items-center gap-4 flex-wrap">
           {isSoc && (
             <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-surface-500" />
+              <Users className="w-4 h-4 text-surface-500" />
               <select
                 value={selectedTenant}
                 onChange={(e) => setSelectedTenant(e.target.value)}
