@@ -31,7 +31,7 @@
 
 ```bash
 # Подключиться как root
-ssh root@YOUR_SERVER_IP
+ssh root@85.239.57.76
 
 # Скачать и запустить скрипт настройки
 curl -sfL https://raw.githubusercontent.com/vmanitskiy-afk/mssp-soc-portal/main/deploy/setup-server.sh | bash
@@ -69,7 +69,7 @@ systemctl restart sshd
 
 ```bash
 # Зайти как deploy
-ssh deploy@YOUR_SERVER_IP
+ssh deploy@85.239.57.76
 
 # Клонировать репозиторий
 cd /opt
@@ -96,7 +96,7 @@ python3 -c "import secrets; print(secrets.token_urlsafe(32))"   # → REDIS_PASS
 - `REDIS_PASSWORD` — сгенерированный выше
 - `RUSIEM_API_URL` — URL вашего RuSIEM (например, `https://siem.company.local/api/v1`)
 - `RUSIEM_API_KEY` — API-ключ RuSIEM
-- `CORS_ORIGINS` — `http://YOUR_SERVER_IP`
+- `CORS_ORIGINS` — `http://85.239.57.76`
 
 ### Запуск:
 
@@ -116,18 +116,18 @@ bash deploy/deploy.sh
 docker compose -f docker-compose.prod.yml exec backend python -m app.scripts.seed_admin
 ```
 
-Портал доступен: `http://YOUR_SERVER_IP`
+Портал доступен: `http://85.239.57.76`
 
 ---
 
 ## 4. Подключение SSL (когда появится домен)
 
-1. Направить DNS A-запись `portal.yourcompany.ru` → IP сервера
+1. Направить DNS A-запись `soc.itnovation.pro` → IP сервера
 2. Дождаться распространения DNS (5–30 мин)
 3. Запустить:
 
 ```bash
-bash deploy/enable-ssl.sh portal.yourcompany.ru
+bash deploy/enable-ssl.sh soc.itnovation.pro
 ```
 
 Скрипт автоматически:
@@ -141,7 +141,7 @@ bash deploy/enable-ssl.sh portal.yourcompany.ru
 ## 5. Обновление
 
 ```bash
-ssh deploy@YOUR_SERVER_IP
+ssh deploy@85.239.57.76
 cd /opt/mssp-soc-portal
 bash deploy/deploy.sh
 ```
