@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { UserPlus, Trash2, Shield, Users, Building2, KeyRound } from 'lucide-react';
+import { Plus, Trash2, Shield, Users } from 'lucide-react';
 import api from '../services/api';
 import type { Tenant } from '../types';
 
@@ -103,7 +103,7 @@ export default function SocUsersPage() {
   };
 
   const handleDeactivate = async (userId: string, userName: string) => {
-    if (!confirm(`Деактивировать пользователя ${userName}?`)) return;
+    if (!window.confirm(`Деактивировать пользователя ${userName}?`)) return;
     try {
       await api.delete(`/soc/users/${userId}`);
       fetchUsers();
@@ -135,7 +135,7 @@ export default function SocUsersPage() {
             borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem',
           }}
         >
-          <UserPlus size={18} />
+          <Plus size={18} />
           Создать пользователя
         </button>
       </div>
@@ -379,7 +379,7 @@ export default function SocUsersPage() {
                   <td style={{ padding: '0.75rem 1rem', color: '#94a3b8', fontSize: '0.875rem' }}>
                     {u.tenant_id ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <Building2 size={14} />
+                        ■
                         {tenants.find((t) => t.id === u.tenant_id)?.name || u.tenant_id.slice(0, 8)}
                       </span>
                     ) : (
@@ -394,7 +394,7 @@ export default function SocUsersPage() {
                       color: u.mfa_enabled ? '#22c55e' : '#475569',
                       fontSize: '0.8rem',
                     }}>
-                      <KeyRound size={14} />
+                      🔑
                       {u.mfa_enabled ? 'Вкл' : 'Выкл'}
                     </span>
                   </td>
