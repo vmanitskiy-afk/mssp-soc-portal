@@ -68,18 +68,24 @@ EOF
 systemctl enable fail2ban && systemctl restart fail2ban
 
 # ── 6. Clone and configure ───────────────────────────────────
-log "Step 6/8: Cloning project..."
-mkdir -p "$PROJECT_DIR" /opt/mssp-soc-portal/backups
-rm -rf "$PROJECT_DIR"
-git clone "$REPO" "$PROJECT_DIR"
-cd "$PROJECT_DIR"
+log "Step 6/8: Setting up project..."
+mkdir -p /opt/mssp-soc-portal/backups
+if [ -d "$PROJECT_DIR/.git" ]; then
+    log "Project already cloned, pulling latest..."
+    cd "$PROJECT_DIR"
+    git pull || true
+else
+    git clone "$REPO" "$PROJECT_DIR" || err "Git clone failed. If repo is private, clone manually with token first."
+    cd "$PROJECT_DIR"
+fi
 
-# Generate secrets
-SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(64))")
-DB_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-REDIS_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+# Generate secrets and .env only if not already present
+if [ ! -f .env.production ]; then
+    SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(64))")
+    DB_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+    REDIS_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 
-cat > .env.production << ENVEOF
+    cat > .env.production << ENVEOF
 APP_ENV=production
 APP_DEBUG=false
 APP_LOG_LEVEL=WARNING
@@ -104,6 +110,10 @@ CORS_ORIGINS=https://${DOMAIN}
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
 ENVEOF
+    log ".env.production created with generated secrets"
+else
+    log ".env.production already exists, keeping it"
+fi
 
 chown -R "$DEPLOY_USER":"$DEPLOY_USER" "$PROJECT_DIR"
 
