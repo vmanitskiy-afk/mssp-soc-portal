@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
-from app.core.security import CurrentUser
+from app.core.security import CurrentUser, get_current_user
 from app.services.dashboard_service import DashboardService
 
 router = APIRouter()
@@ -42,7 +42,7 @@ def _resolve_tenant(user: CurrentUser, tenant_id: str | None) -> str | None:
 @router.get("/summary")
 async def dashboard_summary(
     tenant_id: str | None = Query(None),
-    user: CurrentUser = Depends(),
+    user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Main dashboard: incident stats, SLA, source status."""
@@ -58,7 +58,7 @@ async def dashboard_summary(
 async def incidents_chart(
     period: str = Query("7d", pattern=r"^\d+[dwm]$"),
     tenant_id: str | None = Query(None),
-    user: CurrentUser = Depends(),
+    user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Incidents by priority over time for chart rendering."""
@@ -74,7 +74,7 @@ async def incidents_chart(
 async def sla_metrics(
     period: str = Query("30d", pattern=r"^\d+[dwm]$"),
     tenant_id: str | None = Query(None),
-    user: CurrentUser = Depends(),
+    user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """SLA metrics: MTTA, MTTR, compliance by priority."""
