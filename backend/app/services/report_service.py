@@ -13,7 +13,7 @@ from io import BytesIO
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import PublishedIncident, Tenant, IncidentComment, IncidentStatusChange, SlaSnapshot
+from app.models.models import PublishedIncident, Tenant, IncidentComment, IncidentStatusChange, SlaSnapshot, LogSource
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,18 @@ class ReportService:
         )
         sla_snapshot = result.scalar_one_or_none()
 
-        html = self._render_monthly_html(tenant, incidents, stats, dt_from, dt_to, sla_snapshot)
+        # Get log sources for tenant
+        result = await self.db.execute(
+            select(LogSource)
+            .where(
+                LogSource.tenant_id == tenant_id,
+                LogSource.is_active == True,  # noqa: E712
+            )
+            .order_by(LogSource.status, LogSource.name)
+        )
+        sources = result.scalars().all()
+
+        html = self._render_monthly_html(tenant, incidents, stats, dt_from, dt_to, sla_snapshot, sources)
         return self._html_to_pdf(html)
 
     async def generate_incident_report(
@@ -309,7 +320,7 @@ class ReportService:
         }
         """
 
-    def _render_monthly_html(self, tenant, incidents, stats, dt_from, dt_to, sla_snapshot=None) -> str:
+    def _render_monthly_html(self, tenant, incidents, stats, dt_from, dt_to, sla_snapshot=None, sources=None) -> str:
         period_str = f"{dt_from.strftime('%d.%m.%Y')} — {dt_to.strftime('%d.%m.%Y')}"
         now = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
 
@@ -345,6 +356,40 @@ class ReportService:
                 <td>{status_label}</td>
                 <td>{inc.event_count}</td>
                 <td>{pub_date}</td>
+            </tr>"""
+
+        # Sources table
+        sources = sources or []
+        source_stats = {"total": len(sources), "active": 0, "degraded": 0, "no_logs": 0, "error": 0}
+        for s in sources:
+            st = s.status or "unknown"
+            if st in source_stats:
+                source_stats[st] += 1
+
+        source_status_colors = {
+            "active": "#22c55e", "degraded": "#eab308",
+            "no_logs": "#ef4444", "error": "#ef4444", "unknown": "#6b7280",
+        }
+        source_status_labels = {
+            "active": "Активен", "degraded": "Деградация",
+            "no_logs": "Нет логов", "error": "Ошибка", "unknown": "Неизвестно",
+        }
+
+        source_rows = ""
+        for s in sources:
+            st = s.status or "unknown"
+            color = source_status_colors.get(st, "#6b7280")
+            label = source_status_labels.get(st, st)
+            last_ev = s.last_event_at.strftime("%d.%m.%Y %H:%M") if s.last_event_at else "—"
+            eps_str = f"{s.eps:.1f}" if s.eps else "—"
+            source_rows += f"""
+            <tr>
+                <td>{s.name}</td>
+                <td>{s.source_type}</td>
+                <td>{s.host}</td>
+                <td><span class="badge" style="background:{color}">{label}</span></td>
+                <td>{last_ev}</td>
+                <td style="text-align:center">{eps_str}</td>
             </tr>"""
 
         return f"""<!DOCTYPE html>
@@ -396,6 +441,35 @@ class ReportService:
                 <div class="label">SLA Compliance</div>
             </div>
         </div>
+    </div>
+
+    <div class="section">
+        <h2>Источники логов</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="number">{source_stats['total']}</div>
+                <div class="label">Всего источников</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" style="color:#22c55e">{source_stats['active']}</div>
+                <div class="label">Активных</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" style="color:#eab308">{source_stats['degraded']}</div>
+                <div class="label">Деградация</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" style="color:#ef4444">{source_stats['no_logs'] + source_stats['error']}</div>
+                <div class="label">Нет логов / ошибки</div>
+            </div>
+        </div>
+        {f'''<table>
+            <tr>
+                <th>Название</th><th>Тип</th><th>Хост / IP</th>
+                <th>Статус</th><th>Последнее событие</th><th style="text-align:center">EPS</th>
+            </tr>
+            {source_rows}
+        </table>''' if sources else '<p style="color:#64748b;font-size:10px">Источники не настроены</p>'}
     </div>
 
     <div class="section">
