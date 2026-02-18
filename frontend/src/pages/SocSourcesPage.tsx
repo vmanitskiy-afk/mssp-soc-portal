@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Server, Plus, Pencil, Trash2, RefreshCw, Search,
   CheckCircle, AlertTriangle, XCircle, HelpCircle,
@@ -351,7 +352,7 @@ export default function SocSourcesPage() {
       )}
 
       {/* Add/Edit Modal */}
-      {showModal && (
+      {showModal && createPortal(
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 9999, overflowY: 'auto', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
           onClick={() => setShowModal(false)}
@@ -474,7 +475,8 @@ export default function SocSourcesPage() {
             </div>
           </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
