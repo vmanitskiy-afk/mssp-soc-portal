@@ -352,9 +352,8 @@ export default function SocSourcesPage() {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm overflow-y-auto">
-          <div className="min-h-full flex items-center justify-center p-4">
-          <div className="card w-full max-w-lg p-6 space-y-4 animate-in max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="card w-full max-w-lg mx-4 p-6 space-y-4 animate-in max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-surface-100">
                 {editingId ? 'Редактировать источник' : 'Добавить источник'}
@@ -464,7 +463,6 @@ export default function SocSourcesPage() {
                 {editingId ? 'Сохранить' : 'Добавить'}
               </button>
             </div>
-          </div>
           </div>
         </div>
       )}
