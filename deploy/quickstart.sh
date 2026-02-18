@@ -120,18 +120,18 @@ chown -R "$DEPLOY_USER":"$DEPLOY_USER" "$PROJECT_DIR"
 # ── 7. Build and start ───────────────────────────────────────
 log "Step 7/8: Building and starting services..."
 cd "$PROJECT_DIR"
-docker compose -f docker-compose.prod.yml build --parallel
-docker compose -f docker-compose.prod.yml up -d db
+docker compose --env-file .env.production -f docker-compose.prod.yml build --parallel
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d db
 sleep 8
-docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
-docker compose -f docker-compose.prod.yml up -d
+docker compose --env-file .env.production -f docker-compose.prod.yml run --rm backend alembic upgrade head
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 
 # ── 8. SSL ────────────────────────────────────────────────────
 log "Step 8/8: Obtaining SSL certificate..."
 mkdir -p certbot/conf certbot/www
 
 # Stop nginx briefly for standalone cert
-docker compose -f docker-compose.prod.yml stop nginx
+docker compose --env-file .env.production -f docker-compose.prod.yml stop nginx
 
 docker run --rm \
     -v "$(pwd)/certbot/conf:/etc/letsencrypt" \
@@ -222,11 +222,11 @@ server {
 SSLCONF
 
 # Restart everything with SSL
-docker compose -f docker-compose.prod.yml up -d
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 
 # ── 9. Backup cron ───────────────────────────────────────────
 cat > /etc/cron.d/mssp-backup << 'EOF'
-0 3 * * * deploy cd /opt/mssp-soc-portal && docker compose -f docker-compose.prod.yml exec -T db pg_dump -U portal mssp_portal | gzip > backups/backup-$(date +\%Y\%m\%d).sql.gz 2>/dev/null
+0 3 * * * deploy cd /opt/mssp-soc-portal && docker compose --env-file .env.production -f docker-compose.prod.yml exec -T db pg_dump -U portal mssp_portal | gzip > backups/backup-$(date +\%Y\%m\%d).sql.gz 2>/dev/null
 0 4 * * * deploy find /opt/mssp-soc-portal/backups -name "*.sql.gz" -mtime +30 -delete 2>/dev/null
 EOF
 
@@ -238,10 +238,10 @@ log " https://soc.itnovation.pro"
 log "═══════════════════════════════════════════════════════"
 echo ""
 echo "  Create first admin:"
-echo "  docker compose -f docker-compose.prod.yml exec backend python -m app.scripts.seed_admin"
+echo "  docker compose --env-file .env.production -f docker-compose.prod.yml exec backend python -m app.scripts.seed_admin"
 echo ""
 echo "  ⚠ Don't forget to update RuSIEM credentials:"
 echo "  nano /opt/mssp-soc-portal/.env.production"
 echo "  → RUSIEM_API_URL and RUSIEM_API_KEY"
-echo "  → then: docker compose -f docker-compose.prod.yml restart backend"
+echo "  → then: docker compose --env-file .env.production -f docker-compose.prod.yml restart backend"
 echo ""

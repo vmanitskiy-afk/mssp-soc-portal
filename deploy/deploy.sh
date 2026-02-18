@@ -19,7 +19,7 @@ log() { echo -e "${GREEN}[$(date +%H:%M:%S)]${NC} $1"; }
 warn() { echo -e "${YELLOW}[$(date +%H:%M:%S)]${NC} $1"; }
 err() { echo -e "${RED}[$(date +%H:%M:%S)]${NC} $1"; exit 1; }
 
-COMPOSE="docker compose -f docker-compose.prod.yml"
+COMPOSE="docker compose --env-file .env.production -f docker-compose.prod.yml"
 
 # ── Preflight checks ─────────────────────────────────────────
 [[ ! -f .env.production ]] && err ".env.production not found! Copy from .env.production.example"
