@@ -146,6 +146,7 @@ async def bulk_publish(tenant_short: str, limit: int = 10, skip_existing: bool =
                 title=title,
                 description=desc[:2000] if desc else None,
                 priority=priority,
+                priority_num=priority_num if isinstance(priority_num, int) else 2,
                 category=category,
                 source_ips=source_ips,
                 source_hostnames=src_hosts,
@@ -155,7 +156,7 @@ async def bulk_publish(tenant_short: str, limit: int = 10, skip_existing: bool =
                 recommendations="Рекомендуется провести анализ и принять меры.",
                 soc_actions="Проведена первичная диагностика SOC-аналитиком.",
                 status="new",
-                published_by_id=publisher.id,
+                published_by=publisher.id,
                 published_at=datetime.now(timezone.utc),
                 rusiem_created_at=_parse_dt(detail.get("created_at")),
             )
