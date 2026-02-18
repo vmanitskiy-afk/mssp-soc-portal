@@ -155,3 +155,60 @@ async def _calculate_sla_async():
 
         await db.commit()
     logger.info("SLA calculation complete")
+
+
+# ── Email notification tasks ─────────────────────────────────────
+
+@celery_app.task(name="app.tasks.worker.send_incident_email")
+def send_incident_email(
+    to_emails: list[str],
+    incident_title: str,
+    rusiem_id: int,
+    priority: str,
+    recommendations: str,
+    portal_url: str = "",
+):
+    """Send new incident email notification."""
+    from app.services.email_service import send_email, new_incident_email
+    subject, body = new_incident_email(
+        incident_title, rusiem_id, priority, recommendations, portal_url
+    )
+    for email in to_emails:
+        send_email(email, subject, body)
+
+
+@celery_app.task(name="app.tasks.worker.send_status_change_email")
+def send_status_change_email(
+    to_emails: list[str],
+    incident_title: str,
+    rusiem_id: int,
+    old_status: str,
+    new_status: str,
+    changed_by: str,
+    portal_url: str = "",
+):
+    """Send status change email notification."""
+    from app.services.email_service import send_email, status_change_email
+    subject, body = status_change_email(
+        incident_title, rusiem_id, old_status, new_status, changed_by, portal_url
+    )
+    for email in to_emails:
+        send_email(email, subject, body)
+
+
+@celery_app.task(name="app.tasks.worker.send_comment_email")
+def send_comment_email(
+    to_emails: list[str],
+    incident_title: str,
+    rusiem_id: int,
+    comment_by: str,
+    comment_text: str,
+    portal_url: str = "",
+):
+    """Send new comment email notification."""
+    from app.services.email_service import send_email, new_comment_email
+    subject, body = new_comment_email(
+        incident_title, rusiem_id, comment_by, comment_text, portal_url
+    )
+    for email in to_emails:
+        send_email(email, subject, body)

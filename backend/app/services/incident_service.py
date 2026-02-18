@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.integrations.rusiem.client import RuSIEMClient
 from app.models.models import (
     PublishedIncident, IncidentComment, IncidentStatusChange,
-    Notification, Tenant, AuditLog,
+    Notification, Tenant, AuditLog, User,
 )
 
 logger = logging.getLogger(__name__)
@@ -174,6 +174,22 @@ class IncidentService:
             extra_data={"incident_id": str(incident.id), "priority": preview["priority"]},
         ))
 
+        # Email notification (async via Celery)
+        try:
+            client_emails = await self._get_tenant_emails(tenant_id)
+            if client_emails:
+                from app.tasks.worker import send_incident_email
+                send_incident_email.delay(
+                    client_emails,
+                    preview["title"],
+                    rusiem_incident_id,
+                    preview["priority"],
+                    recommendations or "",
+                    f"https://soc.itnovation.pro/incidents/{incident.id}",
+                )
+        except Exception as e:
+            logger.warning(f"Failed to queue email: {e}")
+
         # Audit
         self.db.add(AuditLog(
             tenant_id=uuid.UUID(tenant_id),
@@ -245,6 +261,28 @@ class IncidentService:
             extra_data={"incident_id": str(incident.id)},
         ))
 
+        # Email notification
+        try:
+            emails = await self._get_tenant_emails(str(incident.tenant_id))
+            if emails:
+                from app.tasks.worker import send_comment_email
+                # Get commenter name
+                commenter = await self.db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                commenter_obj = commenter.scalar_one_or_none()
+                commenter_name = commenter_obj.name if commenter_obj else "Пользователь"
+                send_comment_email.delay(
+                    emails,
+                    incident.title,
+                    incident.rusiem_incident_id,
+                    commenter_name,
+                    text[:300],
+                    f"https://soc.itnovation.pro/incidents/{incident.id}",
+                )
+        except Exception as e:
+            logger.warning(f"Failed to queue comment email: {e}")
+
         await self.db.flush()
         return comment
 
@@ -303,6 +341,28 @@ class IncidentService:
                 "new_status": new_status,
             },
         ))
+
+        # Email notification
+        try:
+            emails = await self._get_tenant_emails(str(incident.tenant_id))
+            if emails:
+                from app.tasks.worker import send_status_change_email
+                changer = await self.db.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                changer_obj = changer.scalar_one_or_none()
+                changer_name = changer_obj.name if changer_obj else "Пользователь"
+                send_status_change_email.delay(
+                    emails,
+                    incident.title,
+                    incident.rusiem_incident_id,
+                    old_status,
+                    new_status,
+                    changer_name,
+                    f"https://soc.itnovation.pro/incidents/{incident.id}",
+                )
+        except Exception as e:
+            logger.warning(f"Failed to queue status email: {e}")
 
         await self.db.flush()
         logger.info(f"Incident {incident_id}: {old_status} -> {new_status}")
@@ -459,3 +519,14 @@ class IncidentService:
         if not incident:
             raise IncidentServiceError("Инцидент не найден", 404)
         return incident
+
+    async def _get_tenant_emails(self, tenant_id: str) -> list[str]:
+        """Get email addresses of active client users for a tenant."""
+        result = await self.db.execute(
+            select(User.email).where(
+                User.tenant_id == uuid.UUID(tenant_id),
+                User.is_active == True,  # noqa: E712
+                User.role.in_(["client_admin", "client_security"]),
+            )
+        )
+        return [row[0] for row in result.all()]

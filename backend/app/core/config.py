@@ -32,11 +32,11 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/2"
 
     # SMTP
-    SMTP_HOST: str = "smtp.example.com"
-    SMTP_PORT: int = 587
+    SMTP_HOST: str = "smtp.mail.ru"
+    SMTP_PORT: int = 465
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-    SMTP_FROM: str = "MSSP SOC Portal <noreply@example.com>"
+    SMTP_FROM: str = "MSSP SOC Portal <cm@krasnodar.pro>"
     SMTP_TLS: bool = True
 
     # CORS
