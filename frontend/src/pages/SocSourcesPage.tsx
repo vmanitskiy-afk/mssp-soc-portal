@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Server, Plus, Pencil, Trash2, RefreshCw, Search,
+  Server, Plus, Pencil, Trash2, Search,
   CheckCircle, AlertTriangle, XCircle, HelpCircle,
-  ChevronDown, X, Loader2, Zap, Settings,
+  ChevronDown, X, Loader2, Zap,
 } from 'lucide-react';
 import api from '../services/api';
 import { timeAgo } from '../utils';
@@ -107,12 +107,8 @@ export default function SocSourcesPage() {
       const params = tenantFilter ? { tenant_id: tenantFilter } : {};
       const { data } = await api.post('/soc/sources/sync', null, { params });
       const results = data.results || [];
-      const totalImported = results.reduce((s: number, r: { sources_imported?: number }) => s + (r.sources_imported || 0), 0);
       const totalUpdated = results.reduce((s: number, r: { sources_updated?: number }) => s + (r.sources_updated || 0), 0);
-      const parts: string[] = [];
-      if (totalImported > 0) parts.push(`импортировано: ${totalImported}`);
-      if (totalUpdated > 0) parts.push(`обновлено: ${totalUpdated}`);
-      setSyncResult(parts.length > 0 ? `Синхронизация завершена — ${parts.join(', ')}` : 'Синхронизация завершена — изменений нет');
+      setSyncResult(totalUpdated > 0 ? `Синхронизация завершена — обновлено: ${totalUpdated}` : 'Синхронизация завершена — изменений нет');
       await fetchSources();
     } catch {
       setSyncResult('Ошибка синхронизации');
@@ -227,9 +223,6 @@ export default function SocSourcesPage() {
           <button onClick={() => setSyncResult('')} className="hover:opacity-70"><X className="w-4 h-4" /></button>
         </div>
       )}
-
-      {/* Source group mapping */}
-      <SourceGroupConfig tenants={tenants} onUpdate={() => fetchSources()} />
 
       {/* Filters */}
       <div className="flex items-center gap-3">
@@ -504,111 +497,4 @@ export default function SocSourcesPage() {
   );
 }
 
-/* ── Source Group Config ──────────────────────────────────────── */
 
-function SourceGroupConfig({ tenants, onUpdate }: { tenants: Tenant[]; onUpdate: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [groups, setGroups] = useState<Record<string, string>>({});
-  const [rusiemlGroups, setRusiemGroups] = useState<string[]>([]);
-  const [loadingGroups, setLoadingGroups] = useState(false);
-  const [saving, setSaving] = useState('');
-
-  useEffect(() => {
-    const map: Record<string, string> = {};
-    tenants.forEach(t => { map[t.id] = t.rusiem_source_group || ''; });
-    setGroups(map);
-  }, [tenants]);
-
-  const fetchGroups = async () => {
-    setLoadingGroups(true);
-    try {
-      const { data } = await api.get('/soc/sources/rusiem-groups');
-      setRusiemGroups(data.items || []);
-    } catch { /* */ }
-    finally { setLoadingGroups(false); }
-  };
-
-  const handleOpen = () => {
-    setOpen(true);
-    fetchGroups();
-  };
-
-  const handleSave = async (tenantId: string) => {
-    setSaving(tenantId);
-    try {
-      await api.put(`/soc/tenants/${tenantId}`, { rusiem_source_group: groups[tenantId] || '' });
-      onUpdate();
-    } catch { /* */ }
-    finally { setSaving(''); }
-  };
-
-  if (!open) {
-    return (
-      <button onClick={handleOpen} className="flex items-center gap-2 text-xs text-surface-500 hover:text-surface-300 transition-colors">
-        <Settings className="w-3.5 h-3.5" />
-        Настроить автоимпорт из RuSIEM
-      </button>
-    );
-  }
-
-  return (
-    <div className="card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-surface-300 flex items-center gap-2">
-          <Settings className="w-4 h-4" />
-          Привязка групп источников RuSIEM к клиентам
-        </h3>
-        <div className="flex items-center gap-2">
-          <button onClick={fetchGroups} disabled={loadingGroups} className="text-xs text-surface-500 hover:text-surface-300 flex items-center gap-1">
-            <RefreshCw className={`w-3 h-3 ${loadingGroups ? 'animate-spin' : ''}`} />
-            Обновить
-          </button>
-          <button onClick={() => setOpen(false)} className="text-surface-500 hover:text-surface-300"><X className="w-4 h-4" /></button>
-        </div>
-      </div>
-      <p className="text-xs text-surface-500 mb-3">
-        Выберите группу источников из RuSIEM для каждого клиента. При синхронизации новые источники из этой группы будут автоматически импортированы.
-      </p>
-      {loadingGroups && rusiemlGroups.length === 0 ? (
-        <div className="flex items-center gap-2 text-xs text-surface-500 py-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Загрузка групп из RuSIEM...</div>
-      ) : (
-        <div className="space-y-2">
-          {tenants.map(t => (
-            <div key={t.id} className="flex items-center gap-3">
-              <span className="text-sm text-surface-300 w-40 truncate" title={t.name}>{t.name}</span>
-              {rusiemlGroups.length > 0 ? (
-                <select
-                  value={groups[t.id] || ''}
-                  onChange={e => setGroups({ ...groups, [t.id]: e.target.value })}
-                  className="input text-xs py-1.5 flex-1"
-                >
-                  <option value="">— Не привязана —</option>
-                  {rusiemlGroups.map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  value={groups[t.id] || ''}
-                  onChange={e => setGroups({ ...groups, [t.id]: e.target.value })}
-                  placeholder="Имя группы вручную"
-                  className="input text-xs py-1.5 flex-1"
-                />
-              )}
-              <button
-                onClick={() => handleSave(t.id)}
-                disabled={saving === t.id}
-                className="btn-secondary text-xs py-1.5 px-3"
-              >
-                {saving === t.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Сохранить'}
-              </button>
-            </div>
-          ))}
-          {rusiemlGroups.length === 0 && !loadingGroups && (
-            <p className="text-xs text-surface-600 mt-1">Группы не найдены в RuSIEM — введите название вручную</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
