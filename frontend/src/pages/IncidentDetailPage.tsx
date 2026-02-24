@@ -493,7 +493,22 @@ export default function IncidentDetailPage() {
             ) : (
               <MetaRow icon={Tag} label="Тип инцидента" value={getIncidentTypeLabel(incident.category)} />
             )}
-            <MetaRow icon={Tag} label="MITRE ATT&CK" value={incident.mitre_id || '—'} />
+            {isSoc ? (
+              <EditableText
+                icon={Tag}
+                label="MITRE ATT&CK"
+                value={incident.mitre_id}
+                placeholder="T1078, T1110..."
+                onSave={async (val) => {
+                  try {
+                    await api.put(`/soc/incidents/${id}`, { mitre_id: val });
+                    await fetchIncident();
+                  } catch { /* */ }
+                }}
+              />
+            ) : (
+              <MetaRow icon={Tag} label="MITRE ATT&CK" value={incident.mitre_id || '—'} />
+            )}
             <MetaRow icon={AlertTriangle} label="Событий" value={String(incident.event_count)} />
             {incident.source_ips.length > 0 && <MetaRow icon={Monitor} label="Source IP" value={incident.source_ips.join(', ')} />}
             {incident.source_hostnames.length > 0 && <MetaRow icon={Monitor} label="Hostname" value={incident.source_hostnames.join(', ')} />}
@@ -569,6 +584,61 @@ function TimelineItem({ color, title, sub, comment, last }: {
         <p className="text-xs text-surface-300 font-medium">{title}</p>
         <p className="text-[11px] text-surface-500 mt-0.5">{sub}</p>
         {comment && <p className="text-xs text-surface-400 mt-0.5 italic">«{comment}»</p>}
+      </div>
+    </div>
+  );
+}
+
+function EditableText({ icon: Icon, label, value, placeholder, onSave }: {
+  icon: React.ElementType; label: string; value: string | null; placeholder?: string;
+  onSave: (v: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (draft !== (value || '')) {
+      setSaving(true);
+      await onSave(draft);
+      setSaving(false);
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-start gap-2">
+        <Icon className="w-3.5 h-3.5 text-surface-600 mt-1.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] text-surface-500 mb-1">{label}</p>
+          {saving ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-400" />
+          ) : (
+            <input
+              autoFocus
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onBlur={save}
+              onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+              placeholder={placeholder}
+              className="input text-xs py-1 px-2 w-full font-mono"
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-2 group cursor-pointer" onClick={() => { setDraft(value || ''); setEditing(true); }}>
+      <Icon className="w-3.5 h-3.5 text-surface-600 mt-0.5 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[11px] text-surface-500">{label}</p>
+        <p className="text-xs text-surface-300 font-mono break-all group-hover:text-brand-400 transition-colors">
+          {value || '—'}
+          <Pencil className="w-3 h-3 inline ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </p>
       </div>
     </div>
   );

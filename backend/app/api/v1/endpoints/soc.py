@@ -47,6 +47,7 @@ class UpdateIncidentRequest(BaseModel):
     recommendations: str | None = None
     soc_actions: str | None = None
     incident_type: str | None = None
+    mitre_id: str | None = None
 
 
 class AddCommentRequest(BaseModel):
@@ -241,6 +242,7 @@ async def update_incident(
             recommendations=body.recommendations,
             soc_actions=body.soc_actions,
             incident_type=body.incident_type,
+            mitre_id=body.mitre_id,
             updated_by_id=user.user_id,
         )
     except IncidentServiceError as e:

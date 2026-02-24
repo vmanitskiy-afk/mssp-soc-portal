@@ -216,6 +216,7 @@ class IncidentService:
         recommendations: str | None = None,
         soc_actions: str | None = None,
         incident_type: str | None = None,
+        mitre_id: str | None = None,
         updated_by_id: str = "",
     ) -> PublishedIncident:
         incident = await self._get_incident(incident_id)
@@ -226,6 +227,8 @@ class IncidentService:
             incident.soc_actions = soc_actions
         if incident_type is not None:
             incident.category = incident_type
+        if mitre_id is not None:
+            incident.mitre_id = mitre_id
 
         await self.db.flush()
         return incident
