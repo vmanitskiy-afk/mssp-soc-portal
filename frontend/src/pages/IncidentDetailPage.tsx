@@ -497,33 +497,14 @@ export default function IncidentDetailPage() {
               <Activity className="w-3.5 h-3.5" /> Хронология
             </h3>
             <div className="space-y-0">
-              {/* Published event */}
-              <TimelineItem
-                color="bg-brand-500"
-                title="Инцидент опубликован"
-                sub={`${incident.published_by_name} · ${formatDate(incident.published_at)}`}
-                last={!incident.acknowledged_at && incident.status_history.length === 0}
-              />
-
-              {/* Acknowledged event */}
-              {incident.acknowledged_at && (
-                <TimelineItem
-                  color="bg-emerald-500"
-                  title="Подтверждён клиентом"
-                  sub={`${incident.acknowledged_by_name || ''} · ${formatDate(incident.acknowledged_at)}`}
-                  last={incident.status_history.length === 0}
-                />
-              )}
-
-              {/* Status changes */}
-              {incident.status_history.map((sh, i) => (
+              {buildTimeline(incident).map((ev, i, arr) => (
                 <TimelineItem
                   key={i}
-                  color="bg-brand-500"
-                  title={`${statusLabel[sh.old_status] || sh.old_status} → ${statusLabel[sh.new_status] || sh.new_status}`}
-                  sub={`${sh.user_name} · ${timeAgo(sh.created_at)}`}
-                  comment={sh.comment}
-                  last={i === incident.status_history.length - 1}
+                  color={ev.color}
+                  title={ev.title}
+                  sub={ev.sub}
+                  comment={ev.comment}
+                  last={i === arr.length - 1}
                 />
               ))}
             </div>
@@ -578,6 +559,48 @@ function TimelineItem({ color, title, sub, comment, last }: {
       </div>
     </div>
   );
+}
+
+function buildTimeline(incident: IncidentDetail) {
+  type TEvent = { time: string; color: string; title: string; sub: string; comment?: string | null };
+  const events: TEvent[] = [];
+
+  // Published
+  if (incident.published_at) {
+    events.push({
+      time: incident.published_at,
+      color: 'bg-brand-500',
+      title: 'Инцидент опубликован',
+      sub: `${incident.published_by_name} · ${formatDate(incident.published_at)}`,
+    });
+  }
+
+  // Acknowledged
+  if (incident.acknowledged_at) {
+    events.push({
+      time: incident.acknowledged_at,
+      color: 'bg-emerald-500',
+      title: 'Подтверждён клиентом',
+      sub: `${incident.acknowledged_by_name || ''} · ${formatDate(incident.acknowledged_at)}`,
+    });
+  }
+
+  // Status changes
+  for (const sh of incident.status_history) {
+    if (sh.created_at) {
+      events.push({
+        time: sh.created_at,
+        color: 'bg-brand-500',
+        title: `${statusLabel[sh.old_status] || sh.old_status} → ${statusLabel[sh.new_status] || sh.new_status}`,
+        sub: `${sh.user_name} · ${timeAgo(sh.created_at)}`,
+        comment: sh.comment,
+      });
+    }
+  }
+
+  // Sort chronologically
+  events.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+  return events;
 }
 
 function getClientTransitions(status: string): string[] {
