@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Building2, Plus, Pencil, Trash2, Power, Server,
+  Building2, Plus, Pencil, Trash2, Power, Server, Users,
   X, Loader2, Mail, Phone, Check, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import api from '../services/api';
@@ -27,6 +27,22 @@ interface SourceItem {
   status: string;
 }
 
+interface UserItem {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  last_login: string | null;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  client_admin: 'Админ',
+  client_security: 'Безопасник',
+  client_auditor: 'Аудитор',
+  client_readonly: 'Только чтение',
+};
+
 const emptyForm = { name: '', short_name: '', contact_email: '', contact_phone: '' };
 
 export default function SocTenantsPage() {
@@ -41,9 +57,10 @@ export default function SocTenantsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Expanded tenant (sources)
+  // Expanded tenant (sources & users)
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sources, setSources] = useState<SourceItem[]>([]);
+  const [tenantUsers, setTenantUsers] = useState<UserItem[]>([]);
   const [loadingSources, setLoadingSources] = useState(false);
 
   const fetchTenants = useCallback(async () => {
@@ -56,11 +73,15 @@ export default function SocTenantsPage() {
 
   useEffect(() => { fetchTenants(); }, [fetchTenants]);
 
-  const fetchSources = async (tenantId: string) => {
+  const fetchTenantDetails = async (tenantId: string) => {
     setLoadingSources(true);
     try {
-      const { data } = await api.get(`/soc/tenants/${tenantId}/sources`);
-      setSources(data.items || []);
+      const [srcRes, usrRes] = await Promise.all([
+        api.get(`/soc/tenants/${tenantId}/sources`),
+        api.get(`/soc/tenants/${tenantId}/users`),
+      ]);
+      setSources(srcRes.data.items || []);
+      setTenantUsers(usrRes.data.items || []);
     } catch { /* */ }
     finally { setLoadingSources(false); }
   };
@@ -69,9 +90,10 @@ export default function SocTenantsPage() {
     if (expandedId === id) {
       setExpandedId(null);
       setSources([]);
+      setTenantUsers([]);
     } else {
       setExpandedId(id);
-      fetchSources(id);
+      fetchTenantDetails(id);
     }
   };
 
@@ -231,29 +253,58 @@ export default function SocTenantsPage() {
               </div>
             </div>
 
-            {/* Expanded: sources */}
+            {/* Expanded: sources & users */}
             {expandedId === t.id && (
               <div className="border-t border-surface-800 p-4">
-                <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <Server className="w-3.5 h-3.5" />
-                  Источники ({sources.length})
-                </h4>
                 {loadingSources ? (
                   <div className="flex items-center gap-2 text-xs text-surface-500 py-2">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" /> Загрузка...
                   </div>
-                ) : sources.length === 0 ? (
-                  <p className="text-xs text-surface-600 py-2">Нет привязанных источников. Добавьте через страницу «Источники».</p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    {sources.map(s => (
-                      <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-800/50 text-xs">
-                        <StatusDot status={s.status} />
-                        <span className="font-medium text-surface-300 truncate">{s.name}</span>
-                        <span className="text-surface-600 font-mono ml-auto">{s.host}</span>
-                        <span className="text-surface-600">{s.source_type}</span>
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Sources */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <Server className="w-3.5 h-3.5" />
+                        Источники ({sources.length})
+                      </h4>
+                      {sources.length === 0 ? (
+                        <p className="text-xs text-surface-600 py-2">Нет источников. Добавьте на странице «Источники».</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {sources.map(s => (
+                            <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-800/50 text-xs">
+                              <StatusDot status={s.status} />
+                              <span className="font-medium text-surface-300 truncate">{s.name}</span>
+                              <span className="text-surface-600 font-mono ml-auto">{s.host}</span>
+                              <span className="text-surface-600">{s.source_type}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Users */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <Users className="w-3.5 h-3.5" />
+                        Пользователи ({tenantUsers.length})
+                      </h4>
+                      {tenantUsers.length === 0 ? (
+                        <p className="text-xs text-surface-600 py-2">Нет пользователей. Добавьте на странице «Пользователи».</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {tenantUsers.map(u => (
+                            <div key={u.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-800/50 text-xs ${!u.is_active ? 'opacity-50' : ''}`}>
+                              <div className={`w-2 h-2 rounded-full shrink-0 ${u.is_active ? 'bg-emerald-400' : 'bg-surface-600'}`} />
+                              <span className="font-medium text-surface-300 truncate">{u.name}</span>
+                              <span className="text-surface-600 truncate">{u.email}</span>
+                              <span className="text-surface-500 ml-auto">{ROLE_LABELS[u.role] || u.role}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

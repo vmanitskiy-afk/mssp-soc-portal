@@ -273,6 +273,37 @@ async def get_tenant_sources(
     }
 
 
+@router.get("/tenants/{tenant_id}/users")
+async def get_tenant_users(
+    tenant_id: str = Path(...),
+    user: CurrentUser = Depends(soc_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all users for a tenant."""
+    from app.models.models import User
+    import uuid as _uuid
+
+    users = (await db.execute(
+        select(User).where(
+            User.tenant_id == _uuid.UUID(tenant_id),
+        ).order_by(User.name)
+    )).scalars().all()
+
+    return {
+        "items": [
+            {
+                "id": str(u.id),
+                "name": u.name,
+                "email": u.email,
+                "role": u.role,
+                "is_active": u.is_active,
+                "last_login": u.last_login.isoformat() if u.last_login else None,
+            }
+            for u in users
+        ]
+    }
+
+
 # ── Incident Preview ─────────────────────────────────────────────
 
 @router.get("/incidents/preview/{rusiem_id}")
