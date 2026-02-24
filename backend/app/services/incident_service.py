@@ -475,6 +475,7 @@ class IncidentService:
 
         return {
             "id": str(incident.id),
+            "tenant_id": str(incident.tenant_id),
             "rusiem_incident_id": incident.rusiem_incident_id,
             "title": incident.title,
             "description": incident.description,

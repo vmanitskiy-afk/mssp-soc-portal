@@ -237,7 +237,7 @@ export default function IncidentDetailPage() {
           <button
             onClick={async () => {
               try {
-                const resp = await api.get(`/reports/incident/${id}`, { responseType: 'blob' });
+                const resp = await api.get(`/reports/incident/${id}`, { params: { tenant_id: incident.tenant_id }, responseType: 'blob' });
                 const url = window.URL.createObjectURL(resp.data);
                 const a = document.createElement('a');
                 a.href = url; a.download = `incident_${incident.rusiem_incident_id}.pdf`;

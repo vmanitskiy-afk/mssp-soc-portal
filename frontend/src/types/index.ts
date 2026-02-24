@@ -67,6 +67,7 @@ export interface StatusChange {
 
 export interface IncidentDetail {
   id: string;
+  tenant_id: string;
   rusiem_incident_id: number;
   title: string;
   description: string | null;
