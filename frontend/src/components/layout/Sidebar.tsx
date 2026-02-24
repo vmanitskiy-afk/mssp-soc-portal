@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import {
   LayoutDashboard, AlertTriangle, Server, FileText,
-  Bell, Shield, Users, LogOut,
+  Bell, Shield, Users, LogOut, Building2,
 } from 'lucide-react';
 
 const clientNav = [
@@ -16,6 +16,7 @@ const clientNav = [
 const socNav = [
   { to: '/soc', icon: LayoutDashboard, label: 'Обзор SOC' },
   { to: '/soc/publish', icon: AlertTriangle, label: 'Публикация' },
+  { to: '/soc/tenants', icon: Building2, label: 'Клиенты' },
   { to: '/soc/sources', icon: Server, label: 'Источники' },
   { to: '/soc/users', icon: Users, label: 'Пользователи' },
   { to: '/reports', icon: FileText, label: 'Отчёты' },

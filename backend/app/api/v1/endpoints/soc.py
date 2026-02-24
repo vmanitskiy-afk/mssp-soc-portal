@@ -15,6 +15,7 @@ import logging
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, EmailStr
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db, get_redis
@@ -107,25 +108,167 @@ async def _get_rusiem(redis_client: aioredis.Redis) -> RuSIEMClient:
 
 @router.get("/tenants")
 async def list_tenants(
+    include_inactive: bool = Query(False),
     user: CurrentUser = Depends(soc_only),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all active tenants for SOC operator dropdown."""
-    from sqlalchemy import select
-    from app.models.models import Tenant
+    """List all tenants for SOC."""
+    from app.models.models import Tenant, LogSource, User
 
-    result = await db.execute(
-        select(Tenant).where(Tenant.is_active == True).order_by(Tenant.name)  # noqa: E712
+    query = select(Tenant).order_by(Tenant.name)
+    if not include_inactive:
+        query = query.where(Tenant.is_active == True)  # noqa: E712
+
+    tenants = (await db.execute(query)).scalars().all()
+
+    # Count sources and users per tenant
+    src_counts = dict(
+        (await db.execute(
+            select(LogSource.tenant_id, func.count()).where(LogSource.is_active == True).group_by(LogSource.tenant_id)  # noqa: E712
+        )).all()
     )
-    tenants = result.scalars().all()
+    usr_counts = dict(
+        (await db.execute(
+            select(User.tenant_id, func.count()).where(User.is_active == True).group_by(User.tenant_id)  # noqa: E712
+        )).all()
+    )
+
     return {
         "items": [
             {
                 "id": str(t.id),
                 "name": t.name,
                 "short_name": t.short_name,
+                "contact_email": t.contact_email,
+                "contact_phone": t.contact_phone,
+                "is_active": t.is_active,
+                "sources_count": src_counts.get(t.id, 0),
+                "users_count": usr_counts.get(t.id, 0),
+                "created_at": t.created_at.isoformat() if t.created_at else None,
             }
             for t in tenants
+        ]
+    }
+
+
+class CreateTenantRequest(BaseModel):
+    name: str
+    short_name: str
+    contact_email: str | None = None
+    contact_phone: str | None = None
+
+
+@router.post("/tenants")
+async def create_tenant(
+    body: CreateTenantRequest,
+    user: CurrentUser = Depends(admin_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new tenant."""
+    from app.models.models import Tenant
+    from app.core.config import get_settings
+
+    settings = get_settings()
+
+    # Check duplicate short_name
+    existing = await db.execute(
+        select(Tenant).where(Tenant.short_name == body.short_name)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(400, f"Клиент с кодом '{body.short_name}' уже существует")
+
+    tenant = Tenant(
+        name=body.name,
+        short_name=body.short_name,
+        rusiem_api_url=settings.RUSIEM_API_URL,
+        rusiem_api_key=settings.RUSIEM_API_KEY,
+        contact_email=body.contact_email,
+        contact_phone=body.contact_phone,
+        is_active=True,
+    )
+    db.add(tenant)
+    await db.flush()
+    return {"ok": True, "id": str(tenant.id)}
+
+
+class UpdateTenantRequest(BaseModel):
+    name: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
+
+
+@router.put("/tenants/{tenant_id}")
+async def update_tenant(
+    body: UpdateTenantRequest,
+    tenant_id: str = Path(...),
+    user: CurrentUser = Depends(admin_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update tenant info."""
+    from app.models.models import Tenant
+    import uuid as _uuid
+
+    tenant = await db.get(Tenant, _uuid.UUID(tenant_id))
+    if not tenant:
+        raise HTTPException(404, "Клиент не найден")
+
+    if body.name is not None:
+        tenant.name = body.name
+    if body.contact_email is not None:
+        tenant.contact_email = body.contact_email or None
+    if body.contact_phone is not None:
+        tenant.contact_phone = body.contact_phone or None
+
+    await db.flush()
+    return {"ok": True}
+
+
+@router.put("/tenants/{tenant_id}/toggle")
+async def toggle_tenant(
+    tenant_id: str = Path(...),
+    user: CurrentUser = Depends(admin_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Activate/deactivate a tenant."""
+    from app.models.models import Tenant
+    import uuid as _uuid
+
+    tenant = await db.get(Tenant, _uuid.UUID(tenant_id))
+    if not tenant:
+        raise HTTPException(404, "Клиент не найден")
+
+    tenant.is_active = not tenant.is_active
+    await db.flush()
+    return {"ok": True, "is_active": tenant.is_active}
+
+
+@router.get("/tenants/{tenant_id}/sources")
+async def get_tenant_sources(
+    tenant_id: str = Path(...),
+    user: CurrentUser = Depends(soc_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all sources for a tenant."""
+    from app.models.models import LogSource
+    import uuid as _uuid
+
+    sources = (await db.execute(
+        select(LogSource).where(
+            LogSource.tenant_id == _uuid.UUID(tenant_id),
+            LogSource.is_active == True,  # noqa: E712
+        ).order_by(LogSource.name)
+    )).scalars().all()
+
+    return {
+        "items": [
+            {
+                "id": str(s.id),
+                "name": s.name,
+                "host": s.host,
+                "source_type": s.source_type,
+                "status": s.status,
+            }
+            for s in sources
         ]
     }
 
@@ -518,7 +661,6 @@ async def trigger_source_sync(
     Queries RuSIEM for recent events per source host, updates statuses.
     """
     from app.services.log_source_service import LogSourceService
-    from sqlalchemy import select
     from app.models.models import Tenant, LogSource
     from datetime import datetime, timezone
 

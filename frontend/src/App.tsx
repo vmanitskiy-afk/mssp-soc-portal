@@ -12,6 +12,7 @@ import SocDashboardPage from './pages/SocDashboardPage';
 import SocPublishPage from './pages/SocPublishPage';
 import SocUsersPage from './pages/SocUsersPage';
 import SocSourcesPage from './pages/SocSourcesPage';
+import SocTenantsPage from './pages/SocTenantsPage';
 import ReportsPage from './pages/ReportsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/soc" element={<SocDashboardPage />} />
         <Route path="/soc/publish" element={<SocPublishPage />} />
         <Route path="/soc/sources" element={<SocSourcesPage />} />
+        <Route path="/soc/tenants" element={<SocTenantsPage />} />
         <Route path="/soc/users" element={<SocUsersPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" />} />
