@@ -47,7 +47,7 @@ export default function IncidentsPage() {
         <div>
           <h1 className="text-2xl font-semibold text-surface-100">Инциденты</h1>
           <p className="text-sm text-surface-500 mt-1">
-            {data ? `${data.total} инцидентов` : 'Загрузка...'}
+            {loading ? 'Загрузка...' : data ? `${data.total} инцидентов` : 'Нет данных'}
           </p>
         </div>
       </div>

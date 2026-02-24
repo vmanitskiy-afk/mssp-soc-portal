@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import {
   LayoutDashboard, AlertTriangle, Server, FileText,
-  Bell, Settings, Shield, Users, LogOut,
+  Bell, Shield, Users, LogOut,
 } from 'lucide-react';
 
 const clientNav = [
@@ -18,12 +18,13 @@ const socNav = [
   { to: '/soc/publish', icon: AlertTriangle, label: 'Публикация' },
   { to: '/soc/sources', icon: Server, label: 'Источники' },
   { to: '/soc/users', icon: Users, label: 'Пользователи' },
+  { to: '/reports', icon: FileText, label: 'Отчёты' },
+  { to: '/', icon: LayoutDashboard, label: 'Дашборд' },
 ];
 
 export default function Sidebar() {
   const { user, logout } = useAuthStore();
   const isSoc = user?.role?.startsWith('soc_');
-  const nav = isSoc ? [...socNav, ...clientNav.slice(1)] : clientNav;
 
   return (
     <aside className="fixed left-0 top-0 bottom-0 w-60 bg-surface-900 border-r border-surface-800 flex flex-col z-30">
@@ -43,15 +44,7 @@ export default function Sidebar() {
             <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-widest">SOC</span>
           </div>
         )}
-        {isSoc && socNav.map((item) => (
-          <SidebarLink key={item.to} {...item} />
-        ))}
-        {isSoc && (
-          <div className="px-2 pt-4 pb-2">
-            <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-widest">Клиент</span>
-          </div>
-        )}
-        {(isSoc ? clientNav : nav).map((item) => (
+        {(isSoc ? socNav : clientNav).map((item) => (
           <SidebarLink key={item.to} {...item} />
         ))}
       </nav>
