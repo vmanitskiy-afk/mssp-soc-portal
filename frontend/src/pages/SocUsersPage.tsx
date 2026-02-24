@@ -358,7 +358,7 @@ function ErrorMsg({ text }: { text: string }) {
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center pt-16">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative card p-6 w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between mb-4">
