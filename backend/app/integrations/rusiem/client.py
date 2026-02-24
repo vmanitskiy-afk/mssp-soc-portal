@@ -256,43 +256,63 @@ class RuSIEMClient:
     # ── Source Groups / Collectors ─────────────────────────────────
 
     async def get_source_groups(self) -> list[dict]:
-        """Get source groups from RuSIEM.
+        """Get source/asset groups from RuSIEM via /assets/tree.
 
-        Returns list of groups with id, name and source count.
-        Tries multiple endpoints as API may vary by version.
+        Returns list of group dicts with name field.
         """
-        for path in ["/collectors/groups", "/source_group/table", "/sources/groups"]:
-            try:
-                data = await self._get(path, cache_ttl=300)
-                if isinstance(data, list):
-                    return data
-                if isinstance(data, dict):
-                    return data.get("data", data.get("items", []))
-            except Exception:
-                continue
-        return []
+        try:
+            data = await self._get("/assets/tree", cache_ttl=300)
+            # /assets/tree returns a tree structure of groups
+            groups: list[dict] = []
+            if isinstance(data, list):
+                for item in data:
+                    self._extract_groups(item, groups)
+            elif isinstance(data, dict):
+                items = data.get("data", data.get("items", data.get("children", [])))
+                if isinstance(items, list):
+                    for item in items:
+                        self._extract_groups(item, groups)
+                # If the dict itself has a name, it's a single group
+                if data.get("name") or data.get("title"):
+                    groups.append(data)
+            return groups
+        except Exception as e:
+            logger.warning(f"Failed to fetch asset groups: {e}")
+            return []
+
+    @staticmethod
+    def _extract_groups(node: dict, result: list[dict], depth: int = 0) -> None:
+        """Recursively extract group names from asset tree."""
+        if not isinstance(node, dict):
+            return
+        name = node.get("name") or node.get("title") or node.get("text") or ""
+        if name:
+            result.append({"name": name, "id": node.get("id", ""), "depth": depth})
+        children = node.get("children", node.get("items", node.get("nodes", [])))
+        if isinstance(children, list):
+            for child in children:
+                RuSIEMClient._extract_groups(child, result, depth + 1)
 
     async def get_collectors(self, group_name: str | None = None) -> list[dict]:
-        """Get collectors/sources from RuSIEM.
+        """Get assets from RuSIEM /assets/table.
 
-        Returns list of sources with host, name, type info.
-        If group_name provided, filters by group.
+        Returns list of assets with host, name, type info.
+        If group_name provided, filters by search.
         """
         params: dict[str, str] = {"length": "500"}
         if group_name:
-            params["group"] = group_name
+            params["search"] = group_name
 
-        for path in ["/collectors/table", "/sources/table", "/collectors/list"]:
-            try:
-                data = await self._get(path, params, cache_ttl=120)
-                if isinstance(data, list):
-                    return data
-                if isinstance(data, dict):
-                    items = data.get("data", data.get("items", data.get("rows", [])))
-                    if isinstance(items, list):
-                        return items
-            except Exception:
-                continue
+        try:
+            data = await self._get("/assets/table", params, cache_ttl=120)
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                items = data.get("data", data.get("items", data.get("rows", [])))
+                if isinstance(items, list):
+                    return items
+        except Exception as e:
+            logger.warning(f"Failed to fetch assets: {e}")
         return []
 
     # ── System ────────────────────────────────────────────────────
