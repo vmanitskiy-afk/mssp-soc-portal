@@ -157,6 +157,41 @@ class UserService:
 
         return {"ok": True}
 
+    async def update_user(
+        self, user_id: str, updated_by_id: str,
+        name: str | None = None, role: str | None = None,
+        tenant_id: str | None = None, is_active: bool | None = None,
+    ) -> dict:
+        """Update user fields."""
+        user = await self.get_user(user_id)
+        if not user:
+            raise UserServiceError("Пользователь не найден", 404)
+
+        if name is not None:
+            user.name = name
+        if role is not None:
+            valid_roles = ["soc_admin", "soc_analyst", "client_admin", "client_security", "client_auditor", "client_readonly"]
+            if role not in valid_roles:
+                raise UserServiceError(f"Недопустимая роль: {role}")
+            user.role = role
+        if tenant_id is not None:
+            user.tenant_id = uuid.UUID(tenant_id) if tenant_id else None
+        if is_active is not None:
+            user.is_active = is_active
+
+        await self.db.flush()
+
+        self.db.add(AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=uuid.UUID(updated_by_id),
+            action="user_updated",
+            resource_type="user",
+            resource_id=str(user.id),
+        ))
+        await self.db.flush()
+
+        return self._user_to_dict(user)
+
     async def reset_password(self, user_id: str, new_password: str, reset_by_id: str) -> dict:
         """Admin password reset (no old password needed)."""
         if len(new_password) < 12:

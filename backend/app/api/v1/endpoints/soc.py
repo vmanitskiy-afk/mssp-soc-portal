@@ -63,6 +63,13 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class UpdateUserRequest(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    tenant_id: str | None = None
+    is_active: bool | None = None
+
+
 class CreateSourceRequest(BaseModel):
     tenant_id: str
     name: str
@@ -363,6 +370,28 @@ async def deactivate_user(
     service = UserService(db)
     try:
         return await service.deactivate_user(user_id, user.user_id)
+    except UserServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+
+@router.put("/users/{user_id}")
+async def update_user(
+    body: UpdateUserRequest,
+    user_id: str = Path(...),
+    user: CurrentUser = Depends(admin_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update user name, role, tenant, active status."""
+    service = UserService(db)
+    try:
+        return await service.update_user(
+            user_id=user_id,
+            updated_by_id=user.user_id,
+            name=body.name,
+            role=body.role,
+            tenant_id=body.tenant_id,
+            is_active=body.is_active,
+        )
     except UserServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
