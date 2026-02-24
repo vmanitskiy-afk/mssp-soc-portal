@@ -253,6 +253,48 @@ class RuSIEMClient:
             params["search"] = search
         return await self._get("/assets/table", params, cache_ttl=300)
 
+    # ── Source Groups / Collectors ─────────────────────────────────
+
+    async def get_source_groups(self) -> list[dict]:
+        """Get source groups from RuSIEM.
+
+        Returns list of groups with id, name and source count.
+        Tries multiple endpoints as API may vary by version.
+        """
+        for path in ["/collectors/groups", "/source_group/table", "/sources/groups"]:
+            try:
+                data = await self._get(path, cache_ttl=300)
+                if isinstance(data, list):
+                    return data
+                if isinstance(data, dict):
+                    return data.get("data", data.get("items", []))
+            except Exception:
+                continue
+        return []
+
+    async def get_collectors(self, group_name: str | None = None) -> list[dict]:
+        """Get collectors/sources from RuSIEM.
+
+        Returns list of sources with host, name, type info.
+        If group_name provided, filters by group.
+        """
+        params: dict[str, str] = {"length": "500"}
+        if group_name:
+            params["group"] = group_name
+
+        for path in ["/collectors/table", "/sources/table", "/collectors/list"]:
+            try:
+                data = await self._get(path, params, cache_ttl=120)
+                if isinstance(data, list):
+                    return data
+                if isinstance(data, dict):
+                    items = data.get("data", data.get("items", data.get("rows", [])))
+                    if isinstance(items, list):
+                        return items
+            except Exception:
+                continue
+        return []
+
     # ── System ────────────────────────────────────────────────────
 
     async def get_eps(self) -> int:

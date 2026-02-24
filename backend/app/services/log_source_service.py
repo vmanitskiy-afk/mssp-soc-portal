@@ -282,6 +282,81 @@ class LogSourceService:
         await self.db.flush()
         return updated
 
+    async def auto_import_sources(
+        self,
+        tenant_id: str,
+        collectors: list[dict],
+    ) -> int:
+        """Auto-import new sources from RuSIEM collectors.
+
+        Compares collectors list against existing sources for the tenant.
+        Creates new LogSource entries for any new hosts.
+
+        Args:
+            tenant_id: Tenant UUID
+            collectors: list of dicts from RuSIEM with host/ip/name info
+
+        Returns:
+            Number of new sources created
+        """
+        # Get existing hosts for this tenant
+        result = await self.db.execute(
+            select(LogSource.host).where(
+                LogSource.tenant_id == tenant_id,
+                LogSource.is_active == True,  # noqa: E712
+            )
+        )
+        existing_hosts = {r[0].lower() for r in result.all()}
+
+        created = 0
+        for collector in collectors:
+            # Try common field names from RuSIEM API
+            host = (
+                collector.get("host")
+                or collector.get("ip")
+                or collector.get("address")
+                or collector.get("source_ip")
+                or collector.get("hostname")
+                or ""
+            ).strip()
+            if not host or host.lower() in existing_hosts:
+                continue
+
+            name = (
+                collector.get("name")
+                or collector.get("title")
+                or collector.get("hostname")
+                or host
+            )
+            source_type = (
+                collector.get("type")
+                or collector.get("source_type")
+                or collector.get("collector_type")
+                or "other"
+            )
+            vendor = collector.get("vendor") or collector.get("product_vendor")
+            product = collector.get("product") or collector.get("product_name")
+            group_name = collector.get("group") or collector.get("group_name")
+
+            source = LogSource(
+                tenant_id=uuid.UUID(tenant_id),
+                name=str(name)[:255],
+                source_type=str(source_type)[:100],
+                host=str(host)[:255],
+                vendor=str(vendor)[:255] if vendor else None,
+                product=str(product)[:255] if product else None,
+                rusiem_group_name=str(group_name)[:255] if group_name else None,
+                status="unknown",
+            )
+            self.db.add(source)
+            existing_hosts.add(host.lower())
+            created += 1
+            logger.info(f"Auto-imported source: {name} ({host}) for tenant {tenant_id}")
+
+        if created:
+            await self.db.flush()
+        return created
+
     async def bulk_update_eps(
         self,
         tenant_id: str,

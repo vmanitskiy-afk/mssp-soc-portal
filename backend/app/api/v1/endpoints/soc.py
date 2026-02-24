@@ -120,10 +120,41 @@ async def list_tenants(
     tenants = result.scalars().all()
     return {
         "items": [
-            {"id": str(t.id), "name": t.name, "short_name": t.short_name}
+            {
+                "id": str(t.id),
+                "name": t.name,
+                "short_name": t.short_name,
+                "rusiem_source_group": t.rusiem_source_group,
+            }
             for t in tenants
         ]
     }
+
+
+class UpdateTenantRequest(BaseModel):
+    rusiem_source_group: str | None = None
+
+
+@router.put("/tenants/{tenant_id}")
+async def update_tenant(
+    body: UpdateTenantRequest,
+    tenant_id: str = Path(...),
+    user: CurrentUser = Depends(admin_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update tenant settings."""
+    from app.models.models import Tenant
+    import uuid as _uuid
+
+    tenant = await db.get(Tenant, _uuid.UUID(tenant_id))
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Клиент не найден")
+
+    if body.rusiem_source_group is not None:
+        tenant.rusiem_source_group = body.rusiem_source_group or None
+
+    await db.flush()
+    return {"ok": True}
 
 
 # ── Incident Preview ─────────────────────────────────────────────
@@ -532,6 +563,19 @@ async def trigger_source_sync(
         tenants = (await db.execute(tenants_query)).scalars().all()
 
         for tenant in tenants:
+            # ── Auto-import new sources from RuSIEM ──
+            imported = 0
+            if tenant.rusiem_source_group:
+                try:
+                    collectors = await rusiem.get_collectors(group_name=tenant.rusiem_source_group)
+                    if collectors:
+                        imported = await service.auto_import_sources(
+                            str(tenant.id), collectors
+                        )
+                except Exception as e:
+                    logger.warning(f"Auto-import failed for {tenant.short_name}: {e}")
+
+            # ── Sync statuses for existing sources ──
             # Get all active sources for this tenant
             sources = (await db.execute(
                 select(LogSource).where(
@@ -578,6 +622,7 @@ async def trigger_source_sync(
                 "tenant": tenant.short_name,
                 "sources_checked": len(sources),
                 "sources_updated": updated,
+                "sources_imported": imported,
             })
 
     finally:

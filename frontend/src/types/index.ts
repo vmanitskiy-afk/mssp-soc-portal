@@ -206,4 +206,5 @@ export interface Tenant {
   id: string;
   name: string;
   short_name: string;
+  rusiem_source_group?: string | null;
 }
