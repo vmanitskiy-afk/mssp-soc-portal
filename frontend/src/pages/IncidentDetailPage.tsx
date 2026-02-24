@@ -755,11 +755,11 @@ function getClientTransitions(status: string): string[] {
 
 function getSocTransitions(status: string): string[] {
   const map: Record<string, string[]> = {
-    new: ['in_progress'],
+    new: ['in_progress', 'false_positive'],
     in_progress: ['awaiting_customer', 'resolved', 'false_positive'],
-    awaiting_soc: ['in_progress', 'resolved'],
-    awaiting_customer: ['in_progress'],
-    resolved: ['closed', 'in_progress'],
+    awaiting_soc: ['in_progress', 'resolved', 'false_positive'],
+    awaiting_customer: ['in_progress', 'false_positive'],
+    resolved: ['closed', 'in_progress', 'false_positive'],
   };
   return map[status] || [];
 }

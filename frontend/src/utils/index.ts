@@ -37,7 +37,7 @@ export const statusLabel: Record<string, string> = {
   awaiting_soc: 'Ожидает SOC',
   resolved: 'Решён',
   closed: 'Закрыт',
-  false_positive: 'Ложное',
+  false_positive: 'Ложный',
 };
 
 export const statusBadgeClass: Record<string, string> = {

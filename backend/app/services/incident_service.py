@@ -57,9 +57,9 @@ CLIENT_TRANSITIONS = {
 SOC_TRANSITIONS = {
     "new": ["in_progress", "awaiting_customer", "false_positive"],
     "in_progress": ["awaiting_customer", "resolved", "false_positive"],
-    "awaiting_soc": ["in_progress", "awaiting_customer", "resolved"],
-    "awaiting_customer": ["in_progress"],
-    "resolved": ["closed", "in_progress"],  # Reopen if needed
+    "awaiting_soc": ["in_progress", "awaiting_customer", "resolved", "false_positive"],
+    "awaiting_customer": ["in_progress", "false_positive"],
+    "resolved": ["closed", "in_progress", "false_positive"],
 }
 
 
