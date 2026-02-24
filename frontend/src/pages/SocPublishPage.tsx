@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { priorityLabel, priorityBadgeClass } from '../utils';
 import type { IncidentPreview, Tenant } from '../types';
+import { INCIDENT_TYPES, INCIDENT_TYPE_GROUPS } from '../constants/incidentTypes';
 
 export default function SocPublishPage() {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ export default function SocPublishPage() {
   const [selectedTenant, setSelectedTenant] = useState('');
   const [recommendations, setRecommendations] = useState('');
   const [socActions, setSocActions] = useState('');
+  const [incidentType, setIncidentType] = useState('');
 
   // Step 3: Publish
   const [publishing, setPublishing] = useState(false);
@@ -69,6 +71,7 @@ export default function SocPublishPage() {
         tenant_id: selectedTenant,
         recommendations,
         soc_actions: socActions || null,
+        incident_type: incidentType || null,
       });
       setPublished(true);
       setPublishedId(data.id);
@@ -104,6 +107,7 @@ export default function SocPublishPage() {
                 setRusiemId('');
                 setRecommendations('');
                 setSocActions('');
+                setIncidentType('');
                 setSelectedTenant('');
               }}
               className="btn-secondary"
@@ -184,7 +188,7 @@ export default function SocPublishPage() {
               <PreviewField label="Описание" value={preview.description} full />
             )}
             <PreviewField label="Категория" value={preview.category || '—'} />
-            <PreviewField label="MITRE" value={preview.mitre_id || '—'} />
+            <PreviewField label="MITRE ATT&CK" value={preview.mitre_id || '—'} />
             <PreviewField label="Событий" value={String(preview.event_count)} />
             <PreviewField label="Статус в RuSIEM" value={preview.rusiem_status} />
 
@@ -239,6 +243,32 @@ export default function SocPublishPage() {
                   placeholder="UUID клиента (tenants ещё не загружены)"
                 />
               )}
+            </div>
+
+            {/* Incident type */}
+            <div>
+              <label className="block text-sm font-medium text-surface-400 mb-1.5">
+                Тип инцидента *
+              </label>
+              <select
+                value={incidentType}
+                onChange={(e) => setIncidentType(e.target.value)}
+                className="input"
+              >
+                <option value="">Выберите тип инцидента</option>
+                {INCIDENT_TYPE_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.types.map((typeVal) => {
+                      const t = INCIDENT_TYPES.find(it => it.value === typeVal);
+                      return t ? (
+                        <option key={t.value} value={t.value}>
+                          {t.label} — {t.desc}
+                        </option>
+                      ) : null;
+                    })}
+                  </optgroup>
+                ))}
+              </select>
             </div>
 
             {/* Recommendations */}

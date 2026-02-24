@@ -7,6 +7,7 @@ import {
 import api from '../services/api';
 import { timeAgo, priorityLabel, statusLabel, statusBadgeClass, priorityBadgeClass } from '../utils';
 import type { IncidentListItem, PaginatedResponse, Priority, IncidentStatus } from '../types';
+import { getIncidentTypeShort } from '../constants/incidentTypes';
 
 export default function IncidentsPage() {
   const [data, setData] = useState<PaginatedResponse<IncidentListItem> | null>(null);
@@ -99,7 +100,7 @@ export default function IncidentsPage() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Инцидент</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Приоритет</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Статус</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Категория</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Тип</th>
               <th className="text-right px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Время</th>
             </tr>
           </thead>
@@ -151,7 +152,7 @@ export default function IncidentsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-xs text-surface-500">
-                      {item.category || '—'}
+                      {getIncidentTypeShort(item.category)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">

@@ -35,6 +35,35 @@ STATUS_LABELS = {
 }
 
 
+_INCIDENT_TYPE_LABELS = {
+    "malware": "Malware — Вредоносное ПО",
+    "phishing": "Phishing — Фишинговые атаки",
+    "network_attack": "Network Attack — Сетевые атаки",
+    "unauthorized_access": "Unauthorized Access — Несанкционированный доступ",
+    "account_compromise": "Account Compromise — Компрометация учетных записей",
+    "privilege_escalation": "Privilege Escalation — Повышение привилегий",
+    "lateral_movement": "Lateral Movement — Горизонтальное перемещение",
+    "command_and_control": "Command and Control — C2 инфраструктура",
+    "reconnaissance": "Reconnaissance — Разведывательная активность",
+    "vulnerability_exploitation": "Vulnerability Exploitation — Эксплуатация уязвимостей",
+    "security_misconfiguration": "Security Misconfiguration — Небезопасные настройки",
+    "data_exfiltration": "Data Exfiltration — Вывод данных",
+    "data_breach": "Data Breach — Утечка данных",
+    "denial_of_service": "Denial of Service — Отказ в обслуживании",
+    "policy_violation": "Policy Violation — Нарушение политик",
+    "insider_threat": "Insider Threat — Внутренние угрозы",
+    "cloud_security_incident": "Cloud Security Incident — Облачные инциденты",
+    "supply_chain_compromise": "Supply Chain Compromise — Компрометация через поставщиков",
+    "other": "Other — Прочее",
+}
+
+
+def _incident_type_label(val: str | None) -> str:
+    if not val:
+        return "—"
+    return _INCIDENT_TYPE_LABELS.get(val, val)
+
+
 class ReportServiceError(Exception):
     def __init__(self, detail: str, status_code: int = 400):
         self.detail = detail
@@ -543,7 +572,7 @@ class ReportService:
             <tr><td style="width:150px;font-weight:600">Название</td><td>{incident.title}</td></tr>
             <tr><td style="font-weight:600">Приоритет</td><td><span class="badge" style="background:{color}">{incident.priority}</span></td></tr>
             <tr><td style="font-weight:600">Статус</td><td>{status_label}</td></tr>
-            <tr><td style="font-weight:600">Категория</td><td>{incident.category or '—'}</td></tr>
+            <tr><td style="font-weight:600">Тип инцидента</td><td>{_incident_type_label(incident.category)}</td></tr>
             <tr><td style="font-weight:600">Количество событий</td><td>{incident.event_count}</td></tr>
             <tr><td style="font-weight:600">IP адреса</td><td>{ips_html or '—'}</td></tr>
             <tr><td style="font-weight:600">Дата публикации</td><td>{pub_date}</td></tr>

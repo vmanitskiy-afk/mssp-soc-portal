@@ -100,6 +100,7 @@ class IncidentService:
         recommendations: str,
         soc_actions: str | None,
         published_by_id: str,
+        incident_type: str | None = None,
     ) -> PublishedIncident:
         """Publish a RuSIEM incident to a specific client.
 
@@ -139,7 +140,7 @@ class IncidentService:
             description=preview.get("description"),
             priority=preview["priority"],
             priority_num=preview["priority_num"],
-            category=preview.get("category"),
+            category=incident_type or preview.get("category"),
             mitre_id=preview.get("mitre_id"),
             source_ips=preview.get("source_ips", []),
             source_hostnames=preview.get("source_hostnames", []),

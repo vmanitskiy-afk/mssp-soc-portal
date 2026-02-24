@@ -13,6 +13,7 @@ import {
   statusBadgeClass, priorityBadgeClass,
 } from '../utils';
 import type { IncidentDetail, IOCIndicator, AffectedAsset } from '../types';
+import { getIncidentTypeLabel } from '../constants/incidentTypes';
 
 const IOC_TYPES = [
   { value: 'ip', label: 'IP-адрес', icon: Monitor },
@@ -479,8 +480,8 @@ export default function IncidentDetailPage() {
             <h3 className="text-xs font-semibold text-surface-500 uppercase tracking-wider">
               Техническая информация
             </h3>
-            <MetaRow icon={Tag} label="Категория" value={incident.category || '—'} />
-            <MetaRow icon={Tag} label="MITRE" value={incident.mitre_id || '—'} />
+            <MetaRow icon={Tag} label="Тип инцидента" value={getIncidentTypeLabel(incident.category)} />
+            <MetaRow icon={Tag} label="MITRE ATT&CK" value={incident.mitre_id || '—'} />
             <MetaRow icon={AlertTriangle} label="Событий" value={String(incident.event_count)} />
             {incident.source_ips.length > 0 && <MetaRow icon={Monitor} label="Source IP" value={incident.source_ips.join(', ')} />}
             {incident.source_hostnames.length > 0 && <MetaRow icon={Monitor} label="Hostname" value={incident.source_hostnames.join(', ')} />}

@@ -40,6 +40,7 @@ class PublishIncidentRequest(BaseModel):
     tenant_id: str
     recommendations: str
     soc_actions: str | None = None
+    incident_type: str | None = None
 
 
 class UpdateIncidentRequest(BaseModel):
@@ -170,6 +171,7 @@ async def publish_incident(
             recommendations=body.recommendations,
             soc_actions=body.soc_actions,
             published_by_id=user.user_id,
+            incident_type=body.incident_type,
         )
     except IncidentServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
