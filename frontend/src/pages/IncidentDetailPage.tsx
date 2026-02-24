@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Clock, Monitor, Globe, Tag, User,
   MessageSquare, Send, ChevronDown, Shield, CheckCircle,
-  AlertTriangle, Loader2, Download, Eye, Plus, Trash2,
+  AlertTriangle, Loader2, Download, Eye, Plus, Trash2, Pencil,
   Server, Hash, Link as LinkIcon, Mail, Activity,
 } from 'lucide-react';
 import api from '../services/api';
@@ -13,7 +13,7 @@ import {
   statusBadgeClass, priorityBadgeClass,
 } from '../utils';
 import type { IncidentDetail, IOCIndicator, AffectedAsset } from '../types';
-import { getIncidentTypeLabel } from '../constants/incidentTypes';
+import { getIncidentTypeLabel, INCIDENT_TYPES, INCIDENT_TYPE_GROUPS } from '../constants/incidentTypes';
 
 const IOC_TYPES = [
   { value: 'ip', label: 'IP-адрес', icon: Monitor },
@@ -480,7 +480,19 @@ export default function IncidentDetailPage() {
             <h3 className="text-xs font-semibold text-surface-500 uppercase tracking-wider">
               Техническая информация
             </h3>
-            <MetaRow icon={Tag} label="Тип инцидента" value={getIncidentTypeLabel(incident.category)} />
+            {isSoc ? (
+              <EditableType
+                value={incident.category}
+                onSave={async (val) => {
+                  try {
+                    await api.put(`/soc/incidents/${id}`, { incident_type: val });
+                    await fetchIncident();
+                  } catch { /* */ }
+                }}
+              />
+            ) : (
+              <MetaRow icon={Tag} label="Тип инцидента" value={getIncidentTypeLabel(incident.category)} />
+            )}
             <MetaRow icon={Tag} label="MITRE ATT&CK" value={incident.mitre_id || '—'} />
             <MetaRow icon={AlertTriangle} label="Событий" value={String(incident.event_count)} />
             {incident.source_ips.length > 0 && <MetaRow icon={Monitor} label="Source IP" value={incident.source_ips.join(', ')} />}
@@ -557,6 +569,63 @@ function TimelineItem({ color, title, sub, comment, last }: {
         <p className="text-xs text-surface-300 font-medium">{title}</p>
         <p className="text-[11px] text-surface-500 mt-0.5">{sub}</p>
         {comment && <p className="text-xs text-surface-400 mt-0.5 italic">«{comment}»</p>}
+      </div>
+    </div>
+  );
+}
+
+function EditableType({ value, onSave }: { value: string | null; onSave: (v: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleChange = async (val: string) => {
+    setSaving(true);
+    await onSave(val);
+    setSaving(false);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-start gap-2">
+        <Tag className="w-3.5 h-3.5 text-surface-600 mt-1.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] text-surface-500 mb-1">Тип инцидента</p>
+          {saving ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-400" />
+          ) : (
+            <select
+              autoFocus
+              value={value || ''}
+              onChange={e => handleChange(e.target.value)}
+              onBlur={() => setEditing(false)}
+              className="input text-xs py-1 px-2"
+            >
+              <option value="">— Не указан —</option>
+              {INCIDENT_TYPE_GROUPS.map(g => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.types.map(tv => {
+                    const t = INCIDENT_TYPES.find(it => it.value === tv);
+                    return t ? <option key={t.value} value={t.value}>{t.label} — {t.desc}</option> : null;
+                  })}
+                </optgroup>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-2 group cursor-pointer" onClick={() => setEditing(true)}>
+      <Tag className="w-3.5 h-3.5 text-surface-600 mt-0.5 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[11px] text-surface-500">Тип инцидента</p>
+        <p className="text-xs text-surface-300 font-mono break-all group-hover:text-brand-400 transition-colors">
+          {getIncidentTypeLabel(value)}
+          <Pencil className="w-3 h-3 inline ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </p>
       </div>
     </div>
   );
