@@ -533,6 +533,31 @@ async def delete_source(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
+@router.get("/sources/rusiem-groups")
+async def get_rusiem_groups(
+    user: CurrentUser = Depends(soc_only),
+    redis_client: aioredis.Redis = Depends(get_redis),
+):
+    """Fetch source group names from RuSIEM."""
+    rusiem = await _get_rusiem(redis_client)
+    try:
+        groups = await rusiem.get_source_groups()
+        # Extract group names from various possible formats
+        names: list[str] = []
+        for g in groups:
+            name = g.get("name") or g.get("title") or g.get("group_name") or ""
+            if isinstance(g, str):
+                name = g
+            if name and name not in names:
+                names.append(name)
+        return {"items": sorted(names)}
+    except Exception as e:
+        logger.warning(f"Failed to fetch RuSIEM groups: {e}")
+        return {"items": []}
+    finally:
+        await rusiem.close()
+
+
 @router.post("/sources/sync")
 async def trigger_source_sync(
     tenant_id: str | None = Query(None, description="Sync specific tenant, or all if empty"),
