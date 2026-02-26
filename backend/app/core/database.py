@@ -46,12 +46,11 @@ async def set_tenant_context(session: AsyncSession, tenant_id: str) -> None:
 
 def create_celery_session():
     """Create a fresh engine + session for Celery tasks (separate event loop)."""
+    from sqlalchemy.pool import NullPool
     _engine = create_async_engine(
         settings.DATABASE_URL,
         echo=False,
-        pool_size=5,
-        max_overflow=2,
-        pool_pre_ping=True,
+        poolclass=NullPool,
     )
     _session_factory = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
     return _engine, _session_factory
