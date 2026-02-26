@@ -19,9 +19,11 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    // Don't intercept auth endpoints — let errors propagate to UI
-    const isAuthUrl = original?.url?.startsWith('/auth/');
-    if (error.response?.status === 401 && !original._retry && !isAuthUrl) {
+    // Skip interceptor for auth endpoints (login, MFA verify, resend)
+    if (original?.url?.includes('/auth/')) {
+      return Promise.reject(error);
+    }
+    if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       const refresh = localStorage.getItem('refresh_token');
       if (refresh) {
