@@ -43,7 +43,7 @@ services:
         condition: service_healthy
     networks:
       - internal
-    command: celery -A app.tasks.worker worker --loglevel=warning --concurrency=2
+    command: celery -A app.tasks.worker worker --loglevel=info --concurrency=2
     deploy:
       resources:
         limits:
@@ -60,6 +60,7 @@ services:
       - redis
     networks:
       - internal
+    command: celery -A app.tasks.worker beat --loglevel=info
     command: celery -A app.tasks.worker beat --loglevel=warning
 
   frontend:
