@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   AlertTriangle, Shield, Server, Clock, TrendingUp,
-  Activity, Tag,
+  Tag,
 } from 'lucide-react';
 import api from '../services/api';
 import { formatMinutes } from '../utils';
@@ -29,11 +29,12 @@ export default function DashboardPage() {
   const [chart, setChart] = useState<ChartDataPoint[]>([]);
   const [slaHistory, setSlaHistory] = useState<SlaPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [chartPeriod, setChartPeriod] = useState('14d');
 
   useEffect(() => {
     Promise.all([
       api.get('/dashboard/summary'),
-      api.get('/dashboard/incidents-chart?period=14d'),
+      api.get(`/dashboard/incidents-chart?period=${chartPeriod}`),
       api.get('/dashboard/sla-history?period=30d'),
     ])
       .then(([s, c, h]) => {
@@ -43,7 +44,7 @@ export default function DashboardPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [chartPeriod]);
 
   if (loading) return <PageSkeleton />;
   if (!summary) return <EmptyState />;
@@ -99,8 +100,24 @@ export default function DashboardPage() {
         {/* Incidents over time */}
         <div className="col-span-2 card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-surface-300">Инциденты за 14 дней</h2>
-            <Activity className="w-4 h-4 text-surface-600" />
+            <h2 className="text-sm font-semibold text-surface-300">
+              Инциденты за {chartPeriod === '1d' ? '24 часа' : chartPeriod === '7d' ? '7 дней' : chartPeriod === '14d' ? '14 дней' : '30 дней'}
+            </h2>
+            <div className="flex items-center gap-1 bg-surface-800 rounded-lg p-0.5">
+              {(['1d', '7d', '14d', '30d'] as const).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setChartPeriod(p)}
+                  className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                    chartPeriod === p
+                      ? 'bg-brand-600/20 text-brand-400 font-medium'
+                      : 'text-surface-500 hover:text-surface-300'
+                  }`}
+                >
+                  {p === '1d' ? '24ч' : p === '7d' ? '7д' : p === '14d' ? '14д' : '30д'}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="h-64">
             {chart.length > 0 ? (
