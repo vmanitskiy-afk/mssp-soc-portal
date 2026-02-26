@@ -126,7 +126,7 @@ export default function SocPublishPage() {
         to="/soc"
         className="inline-flex items-center gap-1.5 text-sm text-surface-500 hover:text-surface-300 transition-colors"
       >
-        <ArrowLeft className="w-4 h-4" /> SOC обзор
+        <ArrowLeft className="w-4 h-4" /> Инциденты
       </Link>
 
       <div>
