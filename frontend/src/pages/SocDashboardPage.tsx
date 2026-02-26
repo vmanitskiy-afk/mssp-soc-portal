@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle, Plus, ArrowUpRight, Clock, MessageSquare,
+  ChevronUp, ChevronDown,
 } from 'lucide-react';
 import api from '../services/api';
 import {
@@ -9,11 +10,21 @@ import {
 } from '../utils';
 import type { IncidentListItem, PaginatedResponse } from '../types';
 
+type SortKey = 'rusiem_incident_id' | 'title' | 'priority' | 'status' | 'published_at';
+type SortDir = 'asc' | 'desc';
+
+const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+const STATUS_ORDER: Record<string, number> = {
+  new: 0, in_progress: 1, awaiting_customer: 2, awaiting_soc: 3, resolved: 4, closed: 5, false_positive: 6,
+};
+
 export default function SocDashboardPage() {
   const [data, setData] = useState<PaginatedResponse<IncidentListItem> | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('published_at');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -35,6 +46,41 @@ export default function SocDashboardPage() {
   const items = data?.items || [];
   const openCount = items.filter((i) => !['closed', 'false_positive'].includes(i.status)).length;
   const criticalCount = items.filter((i) => i.priority === 'critical' && i.status !== 'closed').length;
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'published_at' ? 'desc' : 'asc');
+    }
+  };
+
+  const sortedItems = useMemo(() => {
+    const sorted = [...items];
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'rusiem_incident_id':
+          cmp = a.rusiem_incident_id - b.rusiem_incident_id;
+          break;
+        case 'title':
+          cmp = a.title.localeCompare(b.title, 'ru');
+          break;
+        case 'priority':
+          cmp = (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9);
+          break;
+        case 'status':
+          cmp = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+          break;
+        case 'published_at':
+          cmp = new Date(a.published_at).getTime() - new Date(b.published_at).getTime();
+          break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [items, sortKey, sortDir]);
 
   return (
     <div className="space-y-5 animate-in">
@@ -102,11 +148,11 @@ export default function SocDashboardPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-surface-800">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">RuSIEM ID</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Инцидент</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Приоритет</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Статус</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-surface-500 uppercase tracking-wider">Время</th>
+              <SortHeader label="RuSIEM ID" sortKey="rusiem_incident_id" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Инцидент" sortKey="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Приоритет" sortKey="priority" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Статус" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Время" sortKey="published_at" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
             </tr>
           </thead>
           <tbody>
@@ -125,7 +171,7 @@ export default function SocDashboardPage() {
                 </td>
               </tr>
             ) : (
-              items.map((item) => (
+              sortedItems.map((item) => (
                 <tr
                   key={item.id}
                   className="border-b border-surface-800/50 hover:bg-surface-800/30 transition-colors group"
@@ -170,5 +216,31 @@ export default function SocDashboardPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+function SortHeader({
+  label, sortKey, currentKey, dir, onSort, align = 'left',
+}: {
+  label: string; sortKey: SortKey; currentKey: SortKey; dir: SortDir;
+  onSort: (k: SortKey) => void; align?: 'left' | 'right';
+}) {
+  const active = currentKey === sortKey;
+  return (
+    <th
+      onClick={() => onSort(sortKey)}
+      className={`${align === 'right' ? 'text-right' : 'text-left'} px-4 py-3 text-xs font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors ${
+        active ? 'text-brand-400' : 'text-surface-500 hover:text-surface-300'
+      }`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active ? (
+          dir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+        ) : (
+          <ChevronUp className="w-3 h-3 opacity-0 group-hover:opacity-30" />
+        )}
+      </span>
+    </th>
   );
 }
