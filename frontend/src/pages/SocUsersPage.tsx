@@ -129,6 +129,7 @@ export default function SocUsersPage() {
     setError(''); setSaving(true);
     try {
       await api.post(`/soc/users/${resetUser.id}/reset-password`, { new_password: newPassword });
+      setUsers(prev => prev.map(u => u.id === resetUser.id ? { ...u, mfa_enabled: false } : u));
       setResetUser(null);
       setNewPassword('');
       setSuccess(`Пароль для ${resetUser.name} сброшен. MFA отключён.`);
