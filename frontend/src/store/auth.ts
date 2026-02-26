@@ -7,7 +7,7 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
 
-  login: (email: string, password: string) => Promise<{ requires_mfa: boolean; temp_token?: string }>;
+  login: (email: string, password: string) => Promise<{ requires_mfa: boolean; temp_token?: string; email_hint?: string }>;
   verifyMFA: (tempToken: string, code: string) => Promise<void>;
   logout: () => void;
   fetchUser: () => Promise<void>;
