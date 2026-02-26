@@ -40,7 +40,7 @@ export default function SocDashboardPage() {
     <div className="space-y-5 animate-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-surface-100">SOC — Обзор</h1>
+          <h1 className="text-2xl font-semibold text-surface-100">Инциденты</h1>
           <p className="text-sm text-surface-500 mt-1">
             Все инциденты по всем клиентам
           </p>
