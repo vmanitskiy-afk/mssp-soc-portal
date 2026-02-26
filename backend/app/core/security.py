@@ -29,13 +29,13 @@ def create_access_token(data: dict[str, Any], expires_minutes: int | None = None
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=expires_minutes or settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
     )
-    payload = {**data, "exp": expire, "type": "access"}
+    payload = {"type": "access", **data, "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
 
 def create_refresh_token(data: dict[str, Any]) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
-    payload = {**data, "exp": expire, "type": "refresh"}
+    payload = {"type": "refresh", **data, "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
 
