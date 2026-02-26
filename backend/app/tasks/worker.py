@@ -284,12 +284,13 @@ async def _sync_sources_async():
                     try:
                         events = await rusiem.search_events(
                             query=f"host:{source.host}",
-                            interval="2h",
+                            interval="24h",
                             limit=1,
                         )
                         event_data = events.get("data", [])
                         if event_data:
                             ts = event_data[0].get("timestamp") or event_data[0].get("@timestamp")
+                            logger.info(f"Source {source.host}: found event, ts={ts}")
                             if ts:
                                 if isinstance(ts, str):
                                     last_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -310,10 +311,10 @@ async def _sync_sources_async():
 
                 await rusiem.close()
 
-                if updated > 0:
+                if updated >= 0:
                     logger.info(
                         f"Source sync {tenant.short_name}: "
-                        f"{len(sources)} checked, {updated} updated"
+                        f"{len(sources)} checked, {updated} updated, events={source_events}"
                     )
 
             except Exception as e:
