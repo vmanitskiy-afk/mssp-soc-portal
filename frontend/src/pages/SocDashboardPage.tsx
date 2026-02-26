@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AlertTriangle, Plus, ArrowUpRight, Clock, MessageSquare,
+  AlertTriangle, Plus, ArrowUpRight,
   ChevronUp, ChevronDown,
 } from 'lucide-react';
 import api from '../services/api';
 import {
-  timeAgo, priorityLabel, statusLabel, statusBadgeClass, priorityBadgeClass,
+  formatDate, priorityLabel, statusLabel, statusBadgeClass, priorityBadgeClass,
 } from '../utils';
 import type { IncidentListItem, PaginatedResponse } from '../types';
 
@@ -149,10 +149,10 @@ export default function SocDashboardPage() {
           <thead>
             <tr className="border-b border-surface-800">
               <SortHeader label="RuSIEM ID" sortKey="rusiem_incident_id" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Дата создания" sortKey="published_at" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
               <SortHeader label="Инцидент" sortKey="title" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
               <SortHeader label="Приоритет" sortKey="priority" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
               <SortHeader label="Статус" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-              <SortHeader label="Время" sortKey="published_at" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
             </tr>
           </thead>
           <tbody>
@@ -180,6 +180,9 @@ export default function SocDashboardPage() {
                     <span className="text-xs font-mono text-surface-500">#{item.rusiem_incident_id}</span>
                   </td>
                   <td className="px-4 py-3">
+                    <span className="text-xs text-surface-500">{formatDate(item.published_at)}</span>
+                  </td>
+                  <td className="px-4 py-3">
                     <Link
                       to={`/incidents/${item.id}`}
                       className="text-sm font-medium text-surface-200 hover:text-brand-400 transition-colors flex items-center gap-1.5"
@@ -197,17 +200,6 @@ export default function SocDashboardPage() {
                     <span className={`badge ${statusBadgeClass[item.status]}`}>
                       {statusLabel[item.status]}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      {item.comments_count > 0 && (
-                        <span className="flex items-center gap-1 text-xs text-surface-500">
-                          <MessageSquare className="w-3 h-3" />
-                          {item.comments_count}
-                        </span>
-                      )}
-                      <span className="text-xs text-surface-500">{timeAgo(item.published_at)}</span>
-                    </div>
                   </td>
                 </tr>
               ))
