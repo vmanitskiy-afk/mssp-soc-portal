@@ -2,10 +2,10 @@
 Authentication endpoints.
 
 POST /auth/login         — email + password → temp_token (if MFA) or tokens
-POST /auth/mfa/verify    — temp_token + TOTP → tokens
+POST /auth/mfa/verify    — temp_token + OTP code → tokens
+POST /auth/mfa/resend    — temp_token → resend OTP email
 POST /auth/refresh       — refresh_token → new tokens
-POST /auth/mfa/setup     — generate MFA secret + QR (auth required)
-POST /auth/mfa/confirm   — verify first TOTP to activate MFA
+PUT  /auth/mfa/toggle    — enable/disable MFA (auth required)
 PUT  /auth/password      — change password (auth required)
 GET  /auth/me            — current user info
 """
@@ -31,17 +31,22 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     requires_mfa: bool
     temp_token: str | None = None
+    email_hint: str | None = None
     access_token: str | None = None
     refresh_token: str | None = None
 
 
 class MFAVerifyRequest(BaseModel):
     temp_token: str
-    totp_code: str
+    otp_code: str
 
 
-class MFAConfirmRequest(BaseModel):
-    totp_code: str
+class MFAResendRequest(BaseModel):
+    temp_token: str
+
+
+class MFAToggleRequest(BaseModel):
+    enabled: bool
 
 
 class TokenResponse(BaseModel):
@@ -74,10 +79,8 @@ async def login(
 ):
     """Authenticate with email + password.
 
-    If MFA is enabled, returns temp_token (valid 5 min).
+    If MFA is enabled, sends OTP to email and returns temp_token (valid 5 min).
     Use /auth/mfa/verify to complete login.
-
-    If MFA is not enabled, returns access_token + refresh_token directly.
     """
     service = AuthService(db)
     ip = request.client.host if request.client else ""
@@ -96,7 +99,7 @@ async def mfa_verify(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Complete MFA login by verifying TOTP code.
+    """Complete MFA login by verifying Email OTP code.
 
     Requires temp_token from /auth/login response.
     Returns access_token (15 min) + refresh_token (7 days).
@@ -105,11 +108,44 @@ async def mfa_verify(
     ip = request.client.host if request.client else ""
 
     try:
-        result = await service.verify_mfa(body.temp_token, body.totp_code, ip_address=ip)
+        result = await service.verify_mfa(body.temp_token, body.otp_code, ip_address=ip)
     except AuthError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
     return TokenResponse(**result)
+
+
+@router.post("/mfa/resend")
+async def mfa_resend(
+    body: MFAResendRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Resend OTP code to user's email."""
+    service = AuthService(db)
+
+    try:
+        result = await service.resend_otp(body.temp_token)
+    except AuthError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    return result
+
+
+@router.put("/mfa/toggle")
+async def toggle_mfa(
+    body: MFAToggleRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Enable or disable Email OTP MFA for current user."""
+    service = AuthService(db)
+
+    try:
+        result = await service.toggle_mfa(user.user_id, body.enabled)
+    except AuthError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    return result
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -117,10 +153,7 @@ async def refresh_token(
     refresh_token: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Exchange refresh token for new token pair.
-
-    Old refresh token is invalidated (rotation).
-    """
+    """Exchange refresh token for new token pair."""
     service = AuthService(db)
 
     try:
@@ -129,47 +162,6 @@ async def refresh_token(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
     return TokenResponse(**result)
-
-
-@router.post("/mfa/setup")
-async def setup_mfa(
-    user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Generate MFA secret and QR code URI.
-
-    After scanning QR in authenticator app, call /auth/mfa/confirm
-    with a valid TOTP code to activate MFA.
-    """
-    service = AuthService(db)
-
-    try:
-        result = await service.setup_mfa(user.user_id)
-    except AuthError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    return result
-
-
-@router.post("/mfa/confirm")
-async def confirm_mfa(
-    body: MFAConfirmRequest,
-    user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Confirm MFA setup by providing a valid TOTP code.
-
-    Must be called after /auth/mfa/setup.
-    Once confirmed, MFA is required for all future logins.
-    """
-    service = AuthService(db)
-
-    try:
-        result = await service.confirm_mfa(user.user_id, body.totp_code)
-    except AuthError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    return result
 
 
 @router.put("/password")

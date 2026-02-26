@@ -237,9 +237,18 @@ export default function SocUsersPage() {
                     {u.tenant_id ? tenants.find(t => t.id === u.tenant_id)?.name || u.tenant_id.slice(0, 8) : <span className="text-surface-600">—</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs ${u.mfa_enabled ? 'text-emerald-400' : 'text-surface-600'}`}>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.put(`/soc/users/${u.id}/mfa`, { enabled: !u.mfa_enabled });
+                          setUsers(prev => prev.map(x => x.id === u.id ? { ...x, mfa_enabled: !x.mfa_enabled } : x));
+                        } catch { setError('Не удалось изменить MFA'); }
+                      }}
+                      className={`text-xs px-2 py-0.5 rounded cursor-pointer hover:opacity-80 transition-opacity ${u.mfa_enabled ? 'text-emerald-400 bg-emerald-400/10' : 'text-surface-600 bg-surface-800'}`}
+                      title={u.mfa_enabled ? 'Отключить MFA' : 'Включить MFA'}
+                    >
                       {u.mfa_enabled ? '✓ Вкл' : 'Выкл'}
-                    </span>
+                    </button>
                   </td>
                   <td className="px-4 py-3">
                     {u.is_active ? (

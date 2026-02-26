@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
-import { Shield, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Shield, Eye, EyeOff, Loader2, Mail, RefreshCw } from 'lucide-react';
+import api from '../services/api';
+
+const RESEND_COOLDOWN = 60; // seconds
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -11,10 +14,20 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
-  const [totpCode, setTotpCode] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const [tempToken, setTempToken] = useState('');
+  const [emailHint, setEmailHint] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
+
+  // Cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +37,9 @@ export default function LoginPage() {
       const result = await login(email, password);
       if (result.requires_mfa && result.temp_token) {
         setTempToken(result.temp_token);
+        setEmailHint(result.email_hint || '');
         setStep('mfa');
+        setResendCooldown(RESEND_COOLDOWN);
       } else {
         navigate('/');
       }
@@ -40,7 +55,7 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await verifyMFA(tempToken, totpCode);
+      await verifyMFA(tempToken, otpCode);
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Неверный код');
@@ -48,6 +63,20 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  const handleResend = useCallback(async () => {
+    if (resendCooldown > 0 || resending) return;
+    setResending(true);
+    setError('');
+    try {
+      await api.post('/auth/mfa/resend', { temp_token: tempToken });
+      setResendCooldown(RESEND_COOLDOWN);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Не удалось отправить код');
+    } finally {
+      setResending(false);
+    }
+  }, [tempToken, resendCooldown, resending]);
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
@@ -110,15 +139,21 @@ export default function LoginPage() {
           ) : (
             <form onSubmit={handleMFA} className="space-y-4">
               <div className="text-center mb-2">
-                <p className="text-sm text-surface-400">
-                  Введите код из приложения-аутентификатора
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-brand-600/10 border border-brand-600/20 mb-3">
+                  <Mail className="w-6 h-6 text-brand-400" />
+                </div>
+                <p className="text-sm text-surface-300">
+                  Код отправлен на
+                </p>
+                <p className="text-sm font-medium text-surface-100 mt-0.5">
+                  {emailHint}
                 </p>
               </div>
               <div>
                 <input
                   type="text"
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   className="input text-center text-2xl tracking-[0.5em] font-mono"
                   placeholder="000000"
                   maxLength={6}
@@ -129,13 +164,30 @@ export default function LoginPage() {
               {error && (
                 <p className="text-sm text-red-400 bg-red-400/10 px-3 py-2 rounded-lg">{error}</p>
               )}
-              <button type="submit" disabled={loading || totpCode.length !== 6} className="btn-primary w-full flex items-center justify-center gap-2">
+              <button type="submit" disabled={loading || otpCode.length !== 6} className="btn-primary w-full flex items-center justify-center gap-2">
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                 Подтвердить
               </button>
-              <button type="button" onClick={() => { setStep('login'); setError(''); }} className="btn-ghost w-full text-sm">
-                Назад
-              </button>
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => { setStep('login'); setError(''); setOtpCode(''); }}
+                  className="btn-ghost text-sm"
+                >
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resendCooldown > 0 || resending}
+                  className="flex items-center gap-1.5 text-sm text-surface-400 hover:text-brand-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${resending ? 'animate-spin' : ''}`} />
+                  {resendCooldown > 0
+                    ? `Повторно через ${resendCooldown}с`
+                    : 'Отправить повторно'}
+                </button>
+              </div>
             </form>
           )}
         </div>

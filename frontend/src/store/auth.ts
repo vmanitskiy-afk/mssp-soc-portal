@@ -34,7 +34,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   verifyMFA: async (tempToken, code) => {
     const { data } = await api.post('/auth/mfa/verify', {
       temp_token: tempToken,
-      totp_code: code,
+      otp_code: code,
     });
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);

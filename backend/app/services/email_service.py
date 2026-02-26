@@ -139,6 +139,27 @@ def status_change_email(
     return subject, _base_template(content)
 
 
+def otp_email(code: str, ttl_minutes: int = 5) -> tuple[str, str]:
+    """Returns (subject, html_body) for Email OTP verification."""
+    subject = f"[SOC] Код подтверждения: {code}"
+    content = f"""
+    <h2 style="margin:0 0 15px;color:#1e3a5f;">Код подтверждения входа</h2>
+    <p>Используйте этот код для входа в MSSP SOC Portal:</p>
+    <div style="margin:20px 0;text-align:center;">
+        <span style="display:inline-block;font-size:32px;font-weight:700;letter-spacing:0.3em;
+                      padding:16px 32px;background:#f0f9ff;border:2px solid #3b82f6;
+                      border-radius:12px;color:#1e3a5f;font-family:monospace;">
+            {code}
+        </span>
+    </div>
+    <p style="color:#64748b;font-size:13px;">
+        Код действителен <strong>{ttl_minutes} минут</strong>.<br>
+        Если вы не запрашивали вход — проигнорируйте это письмо.
+    </p>
+    """
+    return subject, _base_template(content)
+
+
 def new_comment_email(
     incident_title: str,
     rusiem_id: int,

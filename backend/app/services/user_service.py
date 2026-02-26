@@ -204,6 +204,8 @@ class UserService:
         user.password_hash = hash_password(new_password)
         user.mfa_enabled = False  # Force MFA re-setup after reset
         user.mfa_secret = None
+        user.otp_code = None
+        user.otp_expires_at = None
         await self.db.flush()
 
         self.db.add(AuditLog(

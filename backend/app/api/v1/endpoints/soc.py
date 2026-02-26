@@ -598,6 +598,26 @@ async def reset_user_password(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
+class MFAToggleRequest(BaseModel):
+    enabled: bool
+
+
+@router.put("/users/{user_id}/mfa")
+async def toggle_user_mfa(
+    body: MFAToggleRequest,
+    user_id: str = Path(...),
+    user: CurrentUser = Depends(admin_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Enable or disable Email OTP MFA for a user (admin only)."""
+    from app.services.auth_service import AuthService, AuthError
+    service = AuthService(db)
+    try:
+        return await service.toggle_mfa(user_id, body.enabled)
+    except AuthError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+
 # ══════════════════════════════════════════════════════════════════
 # Log Source Management (SOC)
 # ══════════════════════════════════════════════════════════════════
