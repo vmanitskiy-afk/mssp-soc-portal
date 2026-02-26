@@ -44,6 +44,7 @@ export interface IncidentListItem {
   priority: Priority;
   status: IncidentStatus;
   category: string | null;
+  tenant_name?: string;
   published_at: string;
   updated_at: string;
   comments_count: number;

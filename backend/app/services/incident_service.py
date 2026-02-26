@@ -420,6 +420,7 @@ class IncidentService:
 
         # Fetch with comment count
         query = query.order_by(PublishedIncident.published_at.desc())
+        query = query.options(selectinload(PublishedIncident.tenant))
         query = query.offset((page - 1) * per_page).limit(per_page)
         result = await self.db.execute(query)
         incidents = result.scalars().all()
@@ -437,6 +438,7 @@ class IncidentService:
                 "priority": inc.priority,
                 "status": inc.status,
                 "category": inc.category,
+                "tenant_name": inc.tenant.short_name if inc.tenant else "",
                 "published_at": inc.published_at.isoformat() if inc.published_at else None,
                 "updated_at": inc.updated_at.isoformat() if inc.updated_at else None,
                 "comments_count": cc.scalar() or 0,

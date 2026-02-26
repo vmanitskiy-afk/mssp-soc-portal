@@ -374,6 +374,8 @@ async def list_all_incidents(
     tenant_id: str | None = Query(None),
     status: str | None = Query(None),
     priority: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     user: CurrentUser = Depends(soc_only),
@@ -383,6 +385,7 @@ async def list_all_incidents(
     service = IncidentService(db)
     return await service.list_incidents(
         tenant_id=tenant_id, status=status, priority=priority,
+        date_from=date_from, date_to=date_to,
         page=page, per_page=per_page,
     )
 

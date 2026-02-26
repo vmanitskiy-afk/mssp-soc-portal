@@ -23,24 +23,33 @@ export default function SocDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
+  const [filterTenant, setFilterTenant] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [tenants, setTenants] = useState<{ id: string; name: string; short_name: string }[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>('published_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string | number> = { per_page: 30 };
+      const params: Record<string, string | number> = { per_page: 100 };
       if (filterStatus) params.status = filterStatus;
       if (filterPriority) params.priority = filterPriority;
+      if (filterTenant) params.tenant_id = filterTenant;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo + 'T23:59:59';
       const { data: resp } = await api.get('/soc/incidents', { params });
       setData(resp);
     } catch {}
     setLoading(false);
-  }, [filterStatus, filterPriority]);
+  }, [filterStatus, filterPriority, filterTenant, dateFrom, dateTo]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    api.get('/soc/tenants').then(({ data }) => setTenants(data.items || [])).catch(() => {});
+  }, []);
 
   // Quick stats
   const items = data?.items || [];
@@ -116,7 +125,17 @@ export default function SocDashboardPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
+        <select
+          value={filterTenant}
+          onChange={(e) => setFilterTenant(e.target.value)}
+          className="input w-auto min-w-[160px]"
+        >
+          <option value="">Все клиенты</option>
+          {tenants.map(t => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
@@ -129,6 +148,7 @@ export default function SocDashboardPage() {
           <option value="awaiting_soc">Ожидает SOC</option>
           <option value="resolved">Решённые</option>
           <option value="closed">Закрытые</option>
+          <option value="false_positive">Ложный</option>
         </select>
         <select
           value={filterPriority}
@@ -141,6 +161,30 @@ export default function SocDashboardPage() {
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-surface-500">с</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="input w-auto text-xs py-1.5"
+          />
+          <span className="text-xs text-surface-500">по</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="input w-auto text-xs py-1.5"
+          />
+        </div>
+        {(filterStatus || filterPriority || filterTenant || dateFrom || dateTo) && (
+          <button
+            onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterTenant(''); setDateFrom(''); setDateTo(''); }}
+            className="text-xs text-surface-500 hover:text-surface-300 transition-colors"
+          >
+            Сбросить
+          </button>
+        )}
       </div>
 
       {/* Table */}
