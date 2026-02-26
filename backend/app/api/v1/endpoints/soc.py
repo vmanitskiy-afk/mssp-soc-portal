@@ -749,7 +749,7 @@ async def trigger_source_sync(
                 try:
                     # Search recent events from this source host in RuSIEM
                     events = await rusiem.search_events(
-                        query=f"source_ip:{source.host} OR event_source_ip:{source.host}",
+                        query=f"host:{source.host}",
                         interval="2h",
                         limit=1,
                     )

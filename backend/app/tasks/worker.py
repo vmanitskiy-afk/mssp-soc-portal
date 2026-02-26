@@ -283,7 +283,7 @@ async def _sync_sources_async():
                 for source in sources:
                     try:
                         events = await rusiem.search_events(
-                            query=f"source_ip:{source.host} OR event_source_ip:{source.host}",
+                            query=f"host:{source.host}",
                             interval="2h",
                             limit=1,
                         )
