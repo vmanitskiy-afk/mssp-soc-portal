@@ -61,7 +61,6 @@ services:
     networks:
       - internal
     command: celery -A app.tasks.worker beat --loglevel=info
-    command: celery -A app.tasks.worker beat --loglevel=warning
 
   frontend:
     build:
