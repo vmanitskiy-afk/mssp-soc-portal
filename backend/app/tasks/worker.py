@@ -58,7 +58,7 @@ def calculate_sla():
 
 async def _calculate_sla_async():
     from sqlalchemy import select
-    from app.core.database import AsyncSessionLocal
+    from app.core.database import create_celery_session
     from app.models.models import (
         Tenant, PublishedIncident, IncidentStatusChange, SlaSnapshot,
     )
@@ -67,7 +67,8 @@ async def _calculate_sla_async():
     period_end = now
     period_start = now - timedelta(hours=24 * 30)  # Last 30 days
 
-    async with AsyncSessionLocal() as db:
+    _engine, _session_factory = create_celery_session()
+    async with _session_factory() as db:
         # Get all active tenants
         result = await db.execute(
             select(Tenant).where(Tenant.is_active == True)  # noqa: E712
@@ -158,6 +159,7 @@ async def _calculate_sla_async():
                 logger.error(f"SLA calc failed for tenant {tenant.id}: {e}")
 
         await db.commit()
+    await _engine.dispose()
     logger.info("SLA calculation complete")
 
 
@@ -239,7 +241,7 @@ def sync_source_statuses():
 
 async def _sync_sources_async():
     from sqlalchemy import select
-    from app.core.database import AsyncSessionLocal
+    from app.core.database import create_celery_session
     from app.models.models import Tenant, LogSource
     from app.services.log_source_service import LogSourceService
     from app.integrations.rusiem.client import RuSIEMClient
@@ -248,7 +250,8 @@ async def _sync_sources_async():
 
     redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
 
-    async with AsyncSessionLocal() as db:
+    _engine, _session_factory = create_celery_session()
+    async with _session_factory() as db:
         # Get all active tenants
         tenants = (await db.execute(
             select(Tenant).where(Tenant.is_active == True)  # noqa: E712
@@ -319,4 +322,5 @@ async def _sync_sources_async():
         await db.commit()
 
     await redis_client.close()
+    await _engine.dispose()
     logger.info("Source status sync complete")

@@ -42,3 +42,16 @@ async def set_tenant_context(session: AsyncSession, tenant_id: str) -> None:
     tenant_id from the JWT token.
     """
     await session.execute(text(f"SET app.current_tenant = '{tenant_id}'"))
+
+
+def create_celery_session():
+    """Create a fresh engine + session for Celery tasks (separate event loop)."""
+    _engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        pool_size=5,
+        max_overflow=2,
+        pool_pre_ping=True,
+    )
+    _session_factory = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
+    return _engine, _session_factory
