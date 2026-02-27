@@ -236,3 +236,32 @@ class DashboardService:
             {"category": row.category, "count": row.count, "open": row.open}
             for row in rows
         ]
+
+    async def get_recent_incidents(self, tenant_id: str | None, days: int = 14, limit: int = 20) -> list[dict]:
+        """Recent incidents list for dashboard table view."""
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+
+        query = (
+            select(PublishedIncident)
+            .where(PublishedIncident.published_at >= since)
+        )
+        if tenant_id:
+            query = query.where(PublishedIncident.tenant_id == tenant_id)
+
+        query = query.order_by(PublishedIncident.published_at.desc()).limit(limit)
+
+        result = await self.db.execute(query)
+        incidents = result.scalars().all()
+
+        return [
+            {
+                "id": str(inc.id),
+                "rusiem_id": inc.rusiem_incident_id,
+                "title": inc.title,
+                "priority": inc.priority,
+                "status": inc.status,
+                "category": inc.category,
+                "published_at": inc.published_at.isoformat() if inc.published_at else None,
+            }
+            for inc in incidents
+        ]

@@ -100,3 +100,19 @@ async def sla_metrics(
 
     service = DashboardService(db)
     return await service.get_sla_metrics(tid, days=_parse_period(period))
+
+
+@router.get("/recent-incidents")
+async def recent_incidents(
+    period: str = Query("14d", pattern=r"^\d+[dwm]$"),
+    tenant_id: str | None = Query(None),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Recent incidents list for dashboard table view."""
+    tid = _resolve_tenant(user, tenant_id)
+    if not tid and user.role not in ("soc_admin", "soc_analyst"):
+        raise HTTPException(status_code=403, detail="Нет привязки к клиенту")
+
+    service = DashboardService(db)
+    return await service.get_recent_incidents(tid, days=_parse_period(period))

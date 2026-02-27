@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   AlertTriangle, Shield, Server, Clock, TrendingUp,
-  Tag,
+  Tag, BarChart3, List,
 } from 'lucide-react';
 import api from '../services/api';
 import { formatMinutes } from '../utils';
@@ -18,29 +18,47 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: '#3b82f6',
 };
 
+const PRIORITY_LABELS: Record<string, string> = {
+  critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low',
+};
+
 interface SlaPoint {
   date: string;
   mtta_minutes: number | null;
   mttr_minutes: number | null;
 }
 
+interface RecentIncident {
+  id: string;
+  rusiem_id: number;
+  title: string;
+  priority: string;
+  status: string;
+  category: string | null;
+  published_at: string | null;
+}
+
 export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [chart, setChart] = useState<ChartDataPoint[]>([]);
   const [slaHistory, setSlaHistory] = useState<SlaPoint[]>([]);
+  const [recentIncidents, setRecentIncidents] = useState<RecentIncident[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartPeriod, setChartPeriod] = useState('14d');
+  const [incidentsView, setIncidentsView] = useState<'chart' | 'list'>('chart');
 
   useEffect(() => {
     Promise.all([
       api.get('/dashboard/summary'),
       api.get(`/dashboard/incidents-chart?period=${chartPeriod}`),
       api.get('/dashboard/sla-history?period=30d'),
+      api.get(`/dashboard/recent-incidents?period=${chartPeriod}`),
     ])
-      .then(([s, c, h]) => {
+      .then(([s, c, h, r]) => {
         setSummary(s.data);
         setChart(c.data);
         setSlaHistory(Array.isArray(h.data) ? h.data : []);
+        setRecentIncidents(Array.isArray(r.data) ? r.data : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -103,39 +121,97 @@ export default function DashboardPage() {
             <h2 className="text-sm font-semibold text-surface-300">
               Инциденты за {chartPeriod === '1d' ? '24 часа' : chartPeriod === '7d' ? '7 дней' : chartPeriod === '14d' ? '14 дней' : '30 дней'}
             </h2>
-            <div className="flex items-center gap-1 bg-surface-800 rounded-lg p-0.5">
-              {(['1d', '7d', '14d', '30d'] as const).map(p => (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5 bg-surface-800 rounded-lg p-0.5">
                 <button
-                  key={p}
-                  onClick={() => setChartPeriod(p)}
-                  className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-                    chartPeriod === p
-                      ? 'bg-brand-600/20 text-brand-400 font-medium'
-                      : 'text-surface-500 hover:text-surface-300'
-                  }`}
+                  onClick={() => setIncidentsView('chart')}
+                  className={`p-1.5 rounded-md transition-colors ${incidentsView === 'chart' ? 'bg-brand-600/20 text-brand-400' : 'text-surface-500 hover:text-surface-300'}`}
+                  title="Гистограмма"
                 >
-                  {p === '1d' ? '24ч' : p === '7d' ? '7д' : p === '14d' ? '14д' : '30д'}
+                  <BarChart3 className="w-3.5 h-3.5" />
                 </button>
-              ))}
+                <button
+                  onClick={() => setIncidentsView('list')}
+                  className={`p-1.5 rounded-md transition-colors ${incidentsView === 'list' ? 'bg-brand-600/20 text-brand-400' : 'text-surface-500 hover:text-surface-300'}`}
+                  title="Список"
+                >
+                  <List className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex items-center gap-1 bg-surface-800 rounded-lg p-0.5">
+                {(['1d', '7d', '14d', '30d'] as const).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setChartPeriod(p)}
+                    className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                      chartPeriod === p
+                        ? 'bg-brand-600/20 text-brand-400 font-medium'
+                        : 'text-surface-500 hover:text-surface-300'
+                    }`}
+                  >
+                    {p === '1d' ? '24ч' : p === '7d' ? '7д' : p === '14d' ? '14д' : '30д'}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="h-64">
-            {chart.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chart} barCategoryGap="20%">
-                  <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tick={{ fill: '#657591', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#657591', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#8593ab' }} />
-                  <Bar dataKey="critical" stackId="a" fill="#ef4444" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="high" stackId="a" fill="#f97316" />
-                  <Bar dataKey="medium" stackId="a" fill="#eab308" />
-                  <Bar dataKey="low" stackId="a" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <ChartEmpty />
-            )}
-          </div>
+
+          {incidentsView === 'chart' ? (
+            <div className="h-64">
+              {chart.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chart} barCategoryGap="20%">
+                    <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tick={{ fill: '#657591', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#657591', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#8593ab' }} />
+                    <Bar dataKey="critical" stackId="a" fill="#ef4444" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="high" stackId="a" fill="#f97316" />
+                    <Bar dataKey="medium" stackId="a" fill="#eab308" />
+                    <Bar dataKey="low" stackId="a" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <ChartEmpty />
+              )}
+            </div>
+          ) : (
+            <div className="h-64 overflow-y-auto custom-scrollbar">
+              {recentIncidents.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-surface-500 border-b border-surface-800">
+                      <th className="text-left py-2 font-medium">Дата</th>
+                      <th className="text-left py-2 font-medium">Инцидент</th>
+                      <th className="text-left py-2 font-medium">Приоритет</th>
+                      <th className="text-left py-2 font-medium">Статус</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentIncidents.map(inc => (
+                      <tr key={inc.id} className="border-b border-surface-800/50 hover:bg-surface-800/30 transition-colors cursor-pointer" onClick={() => window.location.href = `/incidents/${inc.id}`}>
+                        <td className="py-2 text-surface-400 font-mono text-xs whitespace-nowrap">
+                          {inc.published_at ? new Date(inc.published_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '—'}
+                        </td>
+                        <td className="py-2 text-surface-200 truncate max-w-[280px]" title={inc.title}>{inc.title}</td>
+                        <td className="py-2">
+                          <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ color: PRIORITY_COLORS[inc.priority], background: `${PRIORITY_COLORS[inc.priority]}15` }}>
+                            {PRIORITY_LABELS[inc.priority] || inc.priority}
+                          </span>
+                        </td>
+                        <td className="py-2">
+                          <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: statusColors[inc.status] || '#6b7280', background: `${statusColors[inc.status] || '#6b7280'}15` }}>
+                            {statusLabels[inc.status] || inc.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="h-full flex items-center justify-center text-surface-600 text-sm">Нет инцидентов за период</div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Priority distribution */}
