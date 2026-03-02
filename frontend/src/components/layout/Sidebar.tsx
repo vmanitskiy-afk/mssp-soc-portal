@@ -16,6 +16,7 @@ const clientNav = [
 const socNav = [
   { to: '/soc', icon: AlertTriangle, label: 'Инциденты' },
   { to: '/soc/publish', icon: Shield, label: 'Публикация' },
+  { to: '/soc/nkcki', icon: Shield, label: 'НКЦКИ' },
   { to: '/soc/tenants', icon: Building2, label: 'Клиенты' },
   { to: '/soc/sources', icon: Server, label: 'Источники' },
   { to: '/soc/users', icon: Users, label: 'Пользователи' },

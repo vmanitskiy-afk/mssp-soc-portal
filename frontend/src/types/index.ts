@@ -208,3 +208,44 @@ export interface Tenant {
   name: string;
   short_name: string;
 }
+
+// ── НКЦКИ (ГосСОПКА) ────────────────────────────────────────────
+
+export interface NKCKINotificationItem {
+  id: string;
+  incident_id: string | null;
+  incident_title: string | null;
+  incident_rusiem_id: number | null;
+  tenant_id: string;
+  tenant_name: string | null;
+  nkcki_uuid: string | null;
+  nkcki_identifier: string | null;
+  category: string;
+  type: string;
+  company_name: string;
+  tlp: string;
+  event_description: string;
+  nkcki_status: string;
+  sent_by_name: string | null;
+  sent_at: string;
+  detect_time: string;
+}
+
+export interface NKCKICompany {
+  uuid: string;
+  name: string;
+  full_name: string | null;
+  inn: string | null;
+}
+
+export interface NKCKIDictionaries {
+  categories: { value: string; label: string }[];
+  types_ki: string[];
+  types_ka: string[];
+  tlp: string[];
+  activity_statuses: string[];
+  affected_system_categories: string[];
+  affected_system_functions: string[];
+  impacts: string[];
+  indicator_functions: string[];
+}

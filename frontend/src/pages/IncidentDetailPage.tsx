@@ -14,6 +14,7 @@ import {
 } from '../utils';
 import type { IncidentDetail, IOCIndicator, AffectedAsset } from '../types';
 import { getIncidentTypeLabel, INCIDENT_TYPES, INCIDENT_TYPE_GROUPS } from '../constants/incidentTypes';
+import NKCKISendModal from '../components/nkcki/NKCKISendModal';
 
 const IOC_TYPES = [
   { value: 'ip', label: 'IP-адрес', icon: Monitor },
@@ -55,6 +56,9 @@ export default function IncidentDetailPage() {
   // IOC form
   const [newIoc, setNewIoc] = useState<IOCIndicator>({ type: 'ip', value: '', context: '' });
   const [newAsset, setNewAsset] = useState<AffectedAsset>({ name: '', type: 'server', ip: '', criticality: 'medium' });
+
+  // NKCKI modal
+  const [showNkcki, setShowNkcki] = useState(false);
 
   const fetchIncident = async () => {
     try {
@@ -231,6 +235,17 @@ export default function IncidentDetailPage() {
                 </>
               )}
             </div>
+          )}
+
+          {/* НКЦКИ send (SOC only) */}
+          {isSoc && (
+            <button
+              onClick={() => setShowNkcki(true)}
+              className="btn-secondary flex items-center gap-1.5 text-sm"
+              title="Отправить в НКЦКИ"
+            >
+              <Shield className="w-4 h-4" /> НКЦКИ
+            </button>
           )}
 
           {/* PDF */}
@@ -539,6 +554,15 @@ export default function IncidentDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* НКЦКИ Send Modal */}
+      {showNkcki && (
+        <NKCKISendModal
+          incident={incident}
+          onClose={() => setShowNkcki(false)}
+          onSuccess={() => fetchIncident()}
+        />
+      )}
     </div>
   );
 }

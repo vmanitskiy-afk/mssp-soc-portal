@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     RUSIEM_API_KEY: str = ""
     RUSIEM_VERIFY_SSL: bool = False
 
+    # НКЦКИ (ГосСОПКА)
+    NKCKI_API_URL: str = "https://lk.cert.gov.ru/api/v2"
+    NKCKI_API_TOKEN: str = ""
+    NKCKI_ENABLED: bool = False
+
     # Celery
     CELERY_BROKER_URL: str = "redis://redis:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/2"

@@ -235,6 +235,71 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+# ── NKCKI Notifications ───────────────────────────────────────────
+
+class NKCKINotification(Base):
+    """Уведомления, отправленные в НКЦКИ (ГосСОПКА)."""
+    __tablename__ = "nkcki_notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("published_incidents.id"), nullable=True
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+
+    # ── From НКЦКИ response ──
+    nkcki_uuid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    nkcki_identifier: Mapped[str | None] = mapped_column(String(100), nullable=True)  # e.g. "RMSH-24-03-001"
+
+    # ── Notification data ──
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    type: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    owner_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    tlp: Mapped[str] = mapped_column(String(20), nullable=False)
+    event_description: Mapped[str] = mapped_column(Text, nullable=False)
+    detect_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    activity_status: Mapped[str] = mapped_column(String(100), nullable=False)
+    detection_tool: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    assistance: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # ── Affected system ──
+    affected_system_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    affected_system_category: Mapped[str] = mapped_column(String(255), nullable=False)
+    affected_system_function: Mapped[str] = mapped_column(String(255), nullable=False)
+    affected_system_connection: Mapped[bool] = mapped_column(Boolean, default=False)
+    location: Mapped[str] = mapped_column(String(20), nullable=False)
+    city: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # ── Impact (КИ only) ──
+    integrity_impact: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    availability_impact: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    confidentiality_impact: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    custom_impact: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # ── Technical & RKN data (JSONB) ──
+    technical_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    rkn_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # ── Status tracking ──
+    nkcki_status: Mapped[str] = mapped_column(String(100), default="Отправлено")
+    sent_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    response_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # ── Tracking ──
+    sent_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    # ── Relations ──
+    incident: Mapped["PublishedIncident | None"] = relationship(foreign_keys=[incident_id])
+    tenant: Mapped["Tenant"] = relationship()
+    sender: Mapped["User"] = relationship(foreign_keys=[sent_by])
+
+
 # ── Notifications ─────────────────────────────────────────────────
 
 class Notification(Base):

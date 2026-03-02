@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, dashboard, incidents, sources, reports, notifications, soc
+from app.api.v1.endpoints import auth, dashboard, incidents, sources, reports, notifications, soc, nkcki
 
 api_router = APIRouter()
 
@@ -14,3 +14,6 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 
 # ── SOC internal endpoints ────────────────────────────────────────
 api_router.include_router(soc.router, prefix="/soc", tags=["SOC Operations"])
+
+# ── НКЦКИ (ГосСОПКА) endpoints ───────────────────────────────────
+api_router.include_router(nkcki.router, prefix="/nkcki", tags=["НКЦКИ (ГосСОПКА)"])
