@@ -13,6 +13,9 @@ services:
         condition: service_healthy
     networks:
       - internal
+    extra_hosts:
+      - "test-lk.cert.gov.ru:10.0.100.5"
+      - "lk.cert.gov.ru:10.0.100.2"
     command: >
       uvicorn app.main:app
       --host 0.0.0.0
@@ -43,6 +46,9 @@ services:
         condition: service_healthy
     networks:
       - internal
+    extra_hosts:
+      - "test-lk.cert.gov.ru:10.0.100.5"
+      - "lk.cert.gov.ru:10.0.100.2"
     command: celery -A app.tasks.worker worker --loglevel=info --concurrency=2
     deploy:
       resources:
@@ -60,6 +66,9 @@ services:
       - redis
     networks:
       - internal
+    extra_hosts:
+      - "test-lk.cert.gov.ru:10.0.100.5"
+      - "lk.cert.gov.ru:10.0.100.2"
     command: celery -A app.tasks.worker beat --loglevel=info
 
   frontend:
