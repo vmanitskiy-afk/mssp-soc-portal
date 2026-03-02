@@ -200,7 +200,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                   <select
                     value={form.category}
                     onChange={(e) => { update('category', e.target.value); update('type', ''); }}
-                    className="input-field text-sm"
+                    className="input text-sm"
                   >
                     {dicts?.categories.map((c) => (
                       <option key={c.value} value={c.value}>{c.label}</option>
@@ -211,7 +211,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                   <select
                     value={form.type}
                     onChange={(e) => update('type', e.target.value)}
-                    className="input-field text-sm"
+                    className="input text-sm"
                   >
                     <option value="">— Выберите —</option>
                     {typeOptions.map((t) => (
@@ -222,12 +222,12 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="TLP *">
-                  <select value={form.tlp} onChange={(e) => update('tlp', e.target.value)} className="input-field text-sm">
+                  <select value={form.tlp} onChange={(e) => update('tlp', e.target.value)} className="input text-sm">
                     {dicts?.tlp.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </Field>
                 <Field label="Статус реагирования *">
-                  <select value={form.activity_status} onChange={(e) => update('activity_status', e.target.value)} className="input-field text-sm">
+                  <select value={form.activity_status} onChange={(e) => update('activity_status', e.target.value)} className="input text-sm">
                     {dicts?.activity_statuses.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </Field>
@@ -239,7 +239,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Организация (company) *">
                   {companies.length > 0 ? (
-                    <select value={form.company} onChange={(e) => update('company', e.target.value)} className="input-field text-sm">
+                    <select value={form.company} onChange={(e) => update('company', e.target.value)} className="input text-sm">
                       <option value="">— Выберите —</option>
                       {companies.map((c) => (
                         <option key={c.uuid} value={c.name}>{c.name}</option>
@@ -249,7 +249,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                     <input
                       value={form.company}
                       onChange={(e) => update('company', e.target.value)}
-                      className="input-field text-sm"
+                      className="input text-sm"
                       placeholder="Краткое наименование организации"
                     />
                   )}
@@ -258,7 +258,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                   <input
                     value={form.owner_name}
                     onChange={(e) => update('owner_name', e.target.value)}
-                    className="input-field text-sm"
+                    className="input text-sm"
                     placeholder="Наименование организации"
                   />
                 </Field>
@@ -271,7 +271,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                 <textarea
                   value={form.event_description}
                   onChange={(e) => update('event_description', e.target.value)}
-                  className="input-field text-sm min-h-[80px] resize-y"
+                  className="input text-sm min-h-[80px] resize-y"
                   placeholder="Краткое описание события информационной безопасности"
                 />
               </Field>
@@ -280,7 +280,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                   <input
                     value={form.detection_tool}
                     onChange={(e) => update('detection_tool', e.target.value)}
-                    className="input-field text-sm"
+                    className="input text-sm"
                   />
                 </Field>
                 <Field label="Дата выявления *">
@@ -288,7 +288,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                     type="datetime-local"
                     value={form.detect_time}
                     onChange={(e) => update('detect_time', e.target.value)}
-                    className="input-field text-sm"
+                    className="input text-sm"
                   />
                 </Field>
                 <Field label="Дата завершения">
@@ -296,7 +296,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                     type="datetime-local"
                     value={form.end_time}
                     onChange={(e) => update('end_time', e.target.value)}
-                    className="input-field text-sm"
+                    className="input text-sm"
                   />
                 </Field>
               </div>
@@ -324,19 +324,19 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                   <input
                     value={form.affected_system_name}
                     onChange={(e) => update('affected_system_name', e.target.value)}
-                    className="input-field text-sm"
+                    className="input text-sm"
                     placeholder="Название информационной системы"
                   />
                 </Field>
                 <Field label="Категория ОКИИ *">
-                  <select value={form.affected_system_category} onChange={(e) => update('affected_system_category', e.target.value)} className="input-field text-sm">
+                  <select value={form.affected_system_category} onChange={(e) => update('affected_system_category', e.target.value)} className="input text-sm">
                     {dicts?.affected_system_categories.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Сфера функционирования *">
-                  <select value={form.affected_system_function} onChange={(e) => update('affected_system_function', e.target.value)} className="input-field text-sm">
+                  <select value={form.affected_system_function} onChange={(e) => update('affected_system_function', e.target.value)} className="input text-sm">
                     {dicts?.affected_system_functions.map((f) => <option key={f} value={f}>{f}</option>)}
                   </select>
                 </Field>
@@ -344,7 +344,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                   <input
                     value={form.location}
                     onChange={(e) => update('location', e.target.value)}
-                    className="input-field text-sm"
+                    className="input text-sm"
                     placeholder="RU-KDA"
                   />
                 </Field>
@@ -354,7 +354,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                   <input
                     value={form.city}
                     onChange={(e) => update('city', e.target.value)}
-                    className="input-field text-sm"
+                    className="input text-sm"
                     placeholder="Краснодар"
                   />
                 </Field>
@@ -377,17 +377,17 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
               <FieldGroup title="Влияние">
                 <div className="grid grid-cols-3 gap-3">
                   <Field label="Целостность">
-                    <select value={form.integrity_impact} onChange={(e) => update('integrity_impact', e.target.value)} className="input-field text-sm">
+                    <select value={form.integrity_impact} onChange={(e) => update('integrity_impact', e.target.value)} className="input text-sm">
                       {dicts?.impacts.map((i) => <option key={i} value={i}>{i}</option>)}
                     </select>
                   </Field>
                   <Field label="Доступность">
-                    <select value={form.availability_impact} onChange={(e) => update('availability_impact', e.target.value)} className="input-field text-sm">
+                    <select value={form.availability_impact} onChange={(e) => update('availability_impact', e.target.value)} className="input text-sm">
                       {dicts?.impacts.map((i) => <option key={i} value={i}>{i}</option>)}
                     </select>
                   </Field>
                   <Field label="Конфиденциальность">
-                    <select value={form.confidentiality_impact} onChange={(e) => update('confidentiality_impact', e.target.value)} className="input-field text-sm">
+                    <select value={form.confidentiality_impact} onChange={(e) => update('confidentiality_impact', e.target.value)} className="input text-sm">
                       {dicts?.impacts.map((i) => <option key={i} value={i}>{i}</option>)}
                     </select>
                   </Field>
@@ -396,7 +396,7 @@ export default function NKCKISendModal({ incident, onClose, onSuccess }: Props) 
                   <input
                     value={form.custom_impact}
                     onChange={(e) => update('custom_impact', e.target.value)}
-                    className="input-field text-sm"
+                    className="input text-sm"
                     placeholder="Описание иных последствий"
                   />
                 </Field>

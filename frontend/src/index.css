@@ -48,6 +48,11 @@
            transition-all duration-150;
   }
 
+  select.input option {
+    background-color: #1e2330;
+    color: #e2e8f0;
+  }
+
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }

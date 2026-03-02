@@ -94,7 +94,7 @@ export default function SocNkcki() {
           <select
             value={filterTenant}
             onChange={(e) => { setFilterTenant(e.target.value); setPage(1); }}
-            className="input-field text-sm py-1.5 w-48"
+            className="input text-sm py-1.5 w-48"
           >
             <option value="">Все клиенты</option>
             {tenants.map((t) => (
@@ -105,7 +105,7 @@ export default function SocNkcki() {
         <select
           value={filterCategory}
           onChange={(e) => { setFilterCategory(e.target.value); setPage(1); }}
-          className="input-field text-sm py-1.5 w-48"
+          className="input text-sm py-1.5 w-48"
         >
           <option value="">Все категории</option>
           <option value="Уведомление о компьютерном инциденте">КИ</option>
@@ -114,7 +114,7 @@ export default function SocNkcki() {
         <select
           value={filterStatus}
           onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
-          className="input-field text-sm py-1.5 w-48"
+          className="input text-sm py-1.5 w-48"
         >
           <option value="">Все статусы</option>
           <option value="Проверка НКЦКИ">Проверка НКЦКИ</option>
