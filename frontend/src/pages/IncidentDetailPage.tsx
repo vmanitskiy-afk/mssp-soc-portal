@@ -59,6 +59,7 @@ export default function IncidentDetailPage() {
 
   // NKCKI modal
   const [showNkcki, setShowNkcki] = useState(false);
+  const [nkcki, setNkcki] = useState<{ sent: boolean; nkcki_identifier?: string; nkcki_status?: string } | null>(null);
 
   const fetchIncident = async () => {
     try {
@@ -72,7 +73,14 @@ export default function IncidentDetailPage() {
     }
   };
 
-  useEffect(() => { fetchIncident(); }, [id]);
+  const fetchNkcki = async () => {
+    try {
+      const { data } = await api.get(`/nkcki/incident/${id}/status`);
+      setNkcki(data);
+    } catch { /* */ }
+  };
+
+  useEffect(() => { fetchIncident(); fetchNkcki(); }, [id]);
 
   const addComment = async () => {
     if (!comment.trim() || !id) return;
@@ -200,6 +208,11 @@ export default function IncidentDetailPage() {
                 <Eye className="w-3 h-3" /> Подтверждён
               </span>
             )}
+            {nkcki?.sent && (
+              <span className="badge bg-brand-500/15 text-brand-400 border border-brand-500/20 flex items-center gap-1" title={`Рег. номер: ${nkcki.nkcki_identifier || '—'}`}>
+                <Shield className="w-3 h-3" /> НКЦКИ: {nkcki.nkcki_status || 'Отправлено'}
+              </span>
+            )}
           </div>
           <h1 className="text-xl font-semibold text-surface-100">{incident.title}</h1>
           <p className="text-sm text-surface-500 mt-1">
@@ -237,8 +250,8 @@ export default function IncidentDetailPage() {
             </div>
           )}
 
-          {/* НКЦКИ send (SOC only) */}
-          {isSoc && (
+          {/* НКЦКИ send (soc_admin only) */}
+          {user?.role === 'soc_admin' && (
             <button
               onClick={() => setShowNkcki(true)}
               className="btn-secondary flex items-center gap-1.5 text-sm"
@@ -560,7 +573,7 @@ export default function IncidentDetailPage() {
         <NKCKISendModal
           incident={incident}
           onClose={() => setShowNkcki(false)}
-          onSuccess={() => fetchIncident()}
+          onSuccess={() => { fetchIncident(); fetchNkcki(); }}
         />
       )}
     </div>

@@ -27,6 +27,8 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 soc_only = RoleRequired("soc_admin", "soc_analyst")
+admin_only = RoleRequired("soc_admin")
+all_authenticated = RoleRequired("soc_admin", "soc_analyst", "client_admin", "client_security", "client_auditor", "client_readonly")
 
 
 # ── Schemas ──────────────────────────────────────────────────────
@@ -81,7 +83,7 @@ class SendToNKCKIRequest(BaseModel):
 @router.post("/send")
 async def send_to_nkcki(
     body: SendToNKCKIRequest,
-    user: CurrentUser = Depends(soc_only),
+    user: CurrentUser = Depends(admin_only),
     db: AsyncSession = Depends(get_db),
 ):
     """Send an incident as a notification to НКЦКИ."""
@@ -116,14 +118,19 @@ async def list_notifications(
     tenant_id: str | None = None,
     status: str | None = None,
     category: str | None = None,
-    user: CurrentUser = Depends(soc_only),
+    user: CurrentUser = Depends(all_authenticated),
     db: AsyncSession = Depends(get_db),
 ):
-    """List НКЦКИ notifications sent from portal."""
+    """List НКЦКИ notifications. SOC sees all, clients see only their tenant."""
+    # Clients can only see their own tenant's notifications
+    effective_tenant_id = tenant_id
+    if not user.is_soc_staff:
+        effective_tenant_id = user.tenant_id
+
     service = NKCKIService(db)
     return await service.list_notifications(
         page=page, per_page=per_page,
-        tenant_id=tenant_id, status=status, category=category,
+        tenant_id=effective_tenant_id, status=status, category=category,
     )
 
 
@@ -132,7 +139,7 @@ async def list_notifications(
 @router.get("/notifications/{notification_id}")
 async def get_notification(
     notification_id: str,
-    user: CurrentUser = Depends(soc_only),
+    user: CurrentUser = Depends(all_authenticated),
     db: AsyncSession = Depends(get_db),
 ):
     """Get single НКЦКИ notification details."""
@@ -140,10 +147,37 @@ async def get_notification(
     result = await service.get_notification(notification_id)
     if not result:
         raise HTTPException(status_code=404, detail="Уведомление не найдено")
+    # Clients can only see their own tenant's notifications
+    if not user.is_soc_staff and result.get("tenant_id") != user.tenant_id:
+        raise HTTPException(status_code=403, detail="Нет доступа")
     return result
 
 
 # ── Sync status ──────────────────────────────────────────────────
+
+@router.get("/incident/{incident_id}/status")
+async def get_incident_nkcki_status(
+    incident_id: str,
+    user: CurrentUser = Depends(all_authenticated),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check if an incident was sent to НКЦКИ. Returns status or null."""
+    service = NKCKIService(db)
+    result = await service.get_by_incident_id(incident_id)
+    if not result:
+        return {"sent": False}
+    # Clients can only see their own tenant's data
+    if not user.is_soc_staff and result.get("tenant_id") != user.tenant_id:
+        return {"sent": False}
+    return {
+        "sent": True,
+        "nkcki_identifier": result.get("nkcki_identifier"),
+        "nkcki_status": result.get("nkcki_status"),
+        "sent_at": result.get("sent_at"),
+    }
+
+
+# ── Sync status from НКЦКИ API ──────────────────────────────────
 
 @router.post("/notifications/{notification_id}/sync")
 async def sync_notification_status(

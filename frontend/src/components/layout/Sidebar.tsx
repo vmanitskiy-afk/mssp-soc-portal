@@ -9,6 +9,7 @@ const clientNav = [
   { to: '/', icon: LayoutDashboard, label: 'Дашборд' },
   { to: '/incidents', icon: AlertTriangle, label: 'Инциденты' },
   { to: '/sources', icon: Server, label: 'Источники' },
+  { to: '/nkcki', icon: Shield, label: 'НКЦКИ' },
   { to: '/reports', icon: FileText, label: 'Отчёты' },
   { to: '/notifications', icon: Bell, label: 'Уведомления' },
 ];

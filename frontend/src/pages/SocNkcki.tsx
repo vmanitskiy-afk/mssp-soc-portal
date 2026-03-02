@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Shield, RefreshCw, ExternalLink, ChevronLeft, ChevronRight, Search, Filter, Loader2 } from 'lucide-react';
 import api from '../services/api';
 import { formatDate } from '../utils';
+import { useAuthStore } from '../store/auth';
 import type { NKCKINotificationItem, PaginatedResponse, Tenant } from '../types';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -21,6 +22,10 @@ const TLP_COLORS: Record<string, string> = {
 };
 
 export default function SocNkcki() {
+  const { user } = useAuthStore();
+  const isSoc = user?.role?.startsWith('soc_') || false;
+  const isAdmin = user?.role === 'soc_admin';
+
   const [data, setData] = useState<PaginatedResponse<NKCKINotificationItem> | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -50,7 +55,7 @@ export default function SocNkcki() {
     } catch { /* */ }
   };
 
-  useEffect(() => { fetchTenants(); }, []);
+  useEffect(() => { if (isSoc) fetchTenants(); }, []);
   useEffect(() => { fetchData(); }, [page, filterTenant, filterStatus, filterCategory]);
 
   const syncStatus = async (id: string) => {
@@ -85,16 +90,18 @@ export default function SocNkcki() {
       {/* Filters */}
       <div className="card p-3 flex items-center gap-3 flex-wrap">
         <Filter className="w-4 h-4 text-surface-500" />
-        <select
-          value={filterTenant}
-          onChange={(e) => { setFilterTenant(e.target.value); setPage(1); }}
-          className="input-field text-sm py-1.5 w-48"
-        >
-          <option value="">Все клиенты</option>
-          {tenants.map((t) => (
-            <option key={t.id} value={t.id}>{t.name}</option>
-          ))}
-        </select>
+        {isSoc && (
+          <select
+            value={filterTenant}
+            onChange={(e) => { setFilterTenant(e.target.value); setPage(1); }}
+            className="input-field text-sm py-1.5 w-48"
+          >
+            <option value="">Все клиенты</option>
+            {tenants.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        )}
         <select
           value={filterCategory}
           onChange={(e) => { setFilterCategory(e.target.value); setPage(1); }}
@@ -195,16 +202,18 @@ export default function SocNkcki() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => syncStatus(n.id)}
-                      disabled={syncing === n.id}
-                      className="p-1.5 rounded-lg hover:bg-surface-700 text-surface-500 hover:text-surface-300 transition-colors"
-                      title="Синхронизировать статус"
-                    >
-                      {syncing === n.id
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <RefreshCw className="w-4 h-4" />}
-                    </button>
+                    {isSoc && (
+                      <button
+                        onClick={() => syncStatus(n.id)}
+                        disabled={syncing === n.id}
+                        className="p-1.5 rounded-lg hover:bg-surface-700 text-surface-500 hover:text-surface-300 transition-colors"
+                        title="Синхронизировать статус"
+                      >
+                        {syncing === n.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <RefreshCw className="w-4 h-4" />}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -57,6 +57,7 @@ export default function App() {
         <Route path="/incidents/:id" element={<IncidentDetailPage />} />
         <Route path="/sources" element={<SourcesPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/nkcki" element={<SocNkcki />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/soc" element={<SocDashboardPage />} />
         <Route path="/soc/publish" element={<SocPublishPage />} />

@@ -179,6 +179,24 @@ class NKCKIService:
 
         return self._serialize(notification)
 
+    # ── Get by incident ID ──────────────────────────────────────────
+
+    async def get_by_incident_id(self, incident_id: str) -> dict | None:
+        """Get latest NKCKI notification for a portal incident."""
+        query = select(NKCKINotification).options(
+            joinedload(NKCKINotification.incident),
+            joinedload(NKCKINotification.sender),
+            joinedload(NKCKINotification.tenant),
+        ).where(
+            NKCKINotification.incident_id == uuid_mod.UUID(incident_id)
+        ).order_by(desc(NKCKINotification.sent_at)).limit(1)
+
+        result = await self.db.execute(query)
+        notification = result.unique().scalar_one_or_none()
+        if not notification:
+            return None
+        return self._serialize(notification)
+
     # ── Sync status ──────────────────────────────────────────────────
 
     async def sync_status(
