@@ -134,10 +134,6 @@ export default function ReportsPage() {
   // Load SLA data
   useEffect(() => {
     if (!periodFrom) return;
-    if (isSoc && !selectedTenant) {
-      setLoadingSla(false);
-      return;
-    }
     setLoadingSla(true);
     const tp = isSoc && selectedTenant ? `&tenant_id=${selectedTenant}` : '';
     Promise.all([
@@ -233,7 +229,7 @@ export default function ReportsPage() {
                 className="input text-sm"
                 style={{ width: 220 }}
               >
-                <option value="">Выберите клиента</option>
+                <option value="">Все клиенты</option>
                 {tenants.map(t => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
