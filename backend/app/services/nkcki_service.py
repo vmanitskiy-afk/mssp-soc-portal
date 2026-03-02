@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.integrations.nkcki.client import NKCKIClient, NKCKIClientError
-from app.models.models import NKCKINotification, PublishedIncident, Tenant
+from app.models.models import NKCKINotification
 
 logger = logging.getLogger(__name__)
 
