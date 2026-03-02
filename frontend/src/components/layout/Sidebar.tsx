@@ -2,14 +2,14 @@ import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import {
   LayoutDashboard, AlertTriangle, Server, FileText,
-  Bell, Shield, Users, LogOut, Building2,
+  Bell, Shield, ShieldCheck, Users, LogOut, Building2,
 } from 'lucide-react';
 
 const clientNav = [
   { to: '/', icon: LayoutDashboard, label: 'Дашборд' },
   { to: '/incidents', icon: AlertTriangle, label: 'Инциденты' },
   { to: '/sources', icon: Server, label: 'Источники' },
-  { to: '/nkcki', icon: Shield, label: 'НКЦКИ' },
+  { to: '/nkcki', icon: ShieldCheck, label: 'НКЦКИ' },
   { to: '/reports', icon: FileText, label: 'Отчёты' },
   { to: '/notifications', icon: Bell, label: 'Уведомления' },
 ];
@@ -17,7 +17,7 @@ const clientNav = [
 const socNav = [
   { to: '/soc', icon: AlertTriangle, label: 'Инциденты' },
   { to: '/soc/publish', icon: Shield, label: 'Публикация' },
-  { to: '/soc/nkcki', icon: Shield, label: 'НКЦКИ' },
+  { to: '/soc/nkcki', icon: ShieldCheck, label: 'НКЦКИ' },
   { to: '/soc/tenants', icon: Building2, label: 'Клиенты' },
   { to: '/soc/sources', icon: Server, label: 'Источники' },
   { to: '/soc/users', icon: Users, label: 'Пользователи' },
