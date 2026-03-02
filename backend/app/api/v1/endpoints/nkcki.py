@@ -87,15 +87,18 @@ async def send_to_nkcki(
     db: AsyncSession = Depends(get_db),
 ):
     """Send an incident as a notification to НКЦКИ."""
-    service = NKCKIService(db)
+    s = await get_nkcki_settings(db)
+    if s.get("nkcki_enabled", "false").lower() != "true":
+        raise HTTPException(status_code=400, detail="Интеграция с НКЦКИ отключена")
 
+    service = NKCKIService(db)
     try:
         notification = await service.send_notification(
             incident_id=body.incident_id,
             tenant_id=body.tenant_id,
             sent_by=user.user_id,
-            nkcki_url=settings.NKCKI_API_URL,
-            nkcki_token=settings.NKCKI_API_TOKEN,
+            nkcki_url=s["nkcki_api_url"],
+            nkcki_token=s["nkcki_api_token"],
             payload=body.model_dump(),
         )
     except NKCKIServiceError as e:
@@ -186,12 +189,13 @@ async def sync_notification_status(
     db: AsyncSession = Depends(get_db),
 ):
     """Manually sync notification status from НКЦКИ API."""
+    s = await get_nkcki_settings(db)
     service = NKCKIService(db)
     try:
         result = await service.sync_status(
             notification_id,
-            nkcki_url=settings.NKCKI_API_URL,
-            nkcki_token=settings.NKCKI_API_TOKEN,
+            nkcki_url=s["nkcki_api_url"],
+            nkcki_token=s["nkcki_api_token"],
         )
     except NKCKIServiceError as e:
         raise HTTPException(status_code=502, detail=str(e))
@@ -206,11 +210,13 @@ async def sync_notification_status(
 @router.get("/companies")
 async def get_nkcki_companies(
     user: CurrentUser = Depends(soc_only),
+    db: AsyncSession = Depends(get_db),
 ):
     """List organizations available in ГосСОПКА personal account."""
+    s = await get_nkcki_settings(db)
     client = NKCKIClient(
-        base_url=settings.NKCKI_API_URL,
-        token=settings.NKCKI_API_TOKEN,
+        base_url=s["nkcki_api_url"],
+        token=s["nkcki_api_token"],
         verify_ssl=False,
     )
     try:
@@ -300,3 +306,119 @@ async def get_dictionaries(
             "Источник распространения ВПО",
         ],
     }
+
+
+# ── Settings (soc_admin only) ────────────────────────────────────
+
+NKCKI_SETTINGS_KEYS = ["nkcki_api_url", "nkcki_api_token", "nkcki_enabled"]
+
+
+async def get_nkcki_settings(db: AsyncSession) -> dict[str, str]:
+    """Read NKCKI settings from DB, fallback to env."""
+    from app.models.models import PortalSettings
+    from sqlalchemy import select
+
+    result = {}
+    for key in NKCKI_SETTINGS_KEYS:
+        q = select(PortalSettings.value).where(PortalSettings.key == key)
+        row = (await db.execute(q)).scalar_one_or_none()
+        if row is not None and row != "":
+            result[key] = row
+        else:
+            # Fallback to env
+            result[key] = getattr(settings, key.upper(), "")
+    return result
+
+
+class NKCKISettingsUpdate(BaseModel):
+    nkcki_api_url: str | None = None
+    nkcki_api_token: str | None = None
+    nkcki_enabled: bool | None = None
+
+
+@router.get("/settings")
+async def read_nkcki_settings(
+    user: CurrentUser = Depends(admin_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get НКЦКИ integration settings."""
+    s = await get_nkcki_settings(db)
+    return {
+        "nkcki_api_url": s.get("nkcki_api_url", ""),
+        "nkcki_api_token": _mask_token(s.get("nkcki_api_token", "")),
+        "nkcki_api_token_set": bool(s.get("nkcki_api_token", "")),
+        "nkcki_enabled": s.get("nkcki_enabled", "false").lower() == "true",
+    }
+
+
+@router.put("/settings")
+async def update_nkcki_settings(
+    body: NKCKISettingsUpdate,
+    user: CurrentUser = Depends(admin_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update НКЦКИ integration settings."""
+    from app.models.models import PortalSettings
+    import uuid as uuid_mod
+
+    updates = {}
+    if body.nkcki_api_url is not None:
+        updates["nkcki_api_url"] = body.nkcki_api_url
+    if body.nkcki_api_token is not None:
+        updates["nkcki_api_token"] = body.nkcki_api_token
+    if body.nkcki_enabled is not None:
+        updates["nkcki_enabled"] = str(body.nkcki_enabled).lower()
+
+    for key, value in updates.items():
+        from sqlalchemy.dialects.postgresql import insert
+        stmt = insert(PortalSettings).values(
+            key=key, value=value, updated_by=uuid_mod.UUID(user.user_id)
+        ).on_conflict_do_update(
+            index_elements=["key"],
+            set_={"value": value, "updated_by": uuid_mod.UUID(user.user_id)},
+        )
+        await db.execute(stmt)
+
+    await db.commit()
+    logger.info(f"NKCKI settings updated by {user.email}: {list(updates.keys())}")
+
+    s = await get_nkcki_settings(db)
+    return {
+        "nkcki_api_url": s.get("nkcki_api_url", ""),
+        "nkcki_api_token": _mask_token(s.get("nkcki_api_token", "")),
+        "nkcki_api_token_set": bool(s.get("nkcki_api_token", "")),
+        "nkcki_enabled": s.get("nkcki_enabled", "false").lower() == "true",
+    }
+
+
+@router.post("/settings/test")
+async def test_nkcki_connection(
+    user: CurrentUser = Depends(admin_only),
+    db: AsyncSession = Depends(get_db),
+):
+    """Test connection to НКЦКИ API."""
+    s = await get_nkcki_settings(db)
+    url = s.get("nkcki_api_url", "")
+    token = s.get("nkcki_api_token", "")
+
+    if not url or not token:
+        raise HTTPException(status_code=400, detail="URL и токен API не настроены")
+
+    client = NKCKIClient(base_url=url, token=token, verify_ssl=False)
+    try:
+        companies = await client.get_companies(limit=1)
+        return {
+            "success": True,
+            "message": f"Подключение успешно. Доступно организаций: {len(companies)}",
+        }
+    except NKCKIClientError as e:
+        return {
+            "success": False,
+            "message": f"Ошибка подключения: {e}",
+        }
+
+
+def _mask_token(token: str) -> str:
+    if not token or len(token) < 8:
+        return "***" if token else ""
+    return token[:4] + "****" + token[-4:]

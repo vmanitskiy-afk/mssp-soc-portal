@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, RefreshCw, ExternalLink, ChevronLeft, ChevronRight, Search, Filter, Loader2 } from 'lucide-react';
+import { Shield, RefreshCw, ExternalLink, ChevronLeft, ChevronRight, Search, Filter, Loader2, Settings, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react';
 import api from '../services/api';
 import { formatDate } from '../utils';
 import { useAuthStore } from '../store/auth';
@@ -35,6 +35,49 @@ export default function SocNkcki() {
   const [filterCategory, setFilterCategory] = useState('');
   const [syncing, setSyncing] = useState<string | null>(null);
 
+  // Settings (admin only)
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState({ nkcki_api_url: '', nkcki_api_token: '', nkcki_api_token_set: false, nkcki_enabled: false });
+  const [settingsForm, setSettingsForm] = useState({ url: '', token: '', enabled: false });
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showToken, setShowToken] = useState(false);
+
+  const fetchSettings = async () => {
+    if (!isAdmin) return;
+    setSettingsLoading(true);
+    try {
+      const { data: s } = await api.get('/nkcki/settings');
+      setSettings(s);
+      setSettingsForm({ url: s.nkcki_api_url, token: '', enabled: s.nkcki_enabled });
+    } catch { /* */ }
+    setSettingsLoading(false);
+  };
+
+  const saveSettings = async () => {
+    setSettingsSaving(true);
+    setTestResult(null);
+    try {
+      const payload: Record<string, any> = { nkcki_api_url: settingsForm.url, nkcki_enabled: settingsForm.enabled };
+      if (settingsForm.token) payload.nkcki_api_token = settingsForm.token;
+      const { data: s } = await api.put('/nkcki/settings', payload);
+      setSettings(s);
+      setSettingsForm((f) => ({ ...f, token: '' }));
+    } catch { /* */ }
+    setSettingsSaving(false);
+  };
+
+  const testConnection = async () => {
+    setTestResult(null);
+    try {
+      const { data: r } = await api.post('/nkcki/settings/test');
+      setTestResult(r);
+    } catch (e: any) {
+      setTestResult({ success: false, message: e.response?.data?.detail || 'Ошибка' });
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -55,7 +98,7 @@ export default function SocNkcki() {
     } catch { /* */ }
   };
 
-  useEffect(() => { if (isSoc) fetchTenants(); }, []);
+  useEffect(() => { if (isSoc) fetchTenants(); if (isAdmin) fetchSettings(); }, []);
   useEffect(() => { fetchData(); }, [page, filterTenant, filterStatus, filterCategory]);
 
   const syncStatus = async (id: string) => {
@@ -85,7 +128,97 @@ export default function SocNkcki() {
             Всего: {data.total}
           </span>
         )}
+        {isAdmin && (
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={`btn-secondary flex items-center gap-1.5 text-sm ${showSettings ? 'bg-surface-700' : ''}`}
+          >
+            <Settings className="w-4 h-4" /> Настройки
+          </button>
+        )}
       </div>
+
+      {/* Settings panel (soc_admin only) */}
+      {isAdmin && showSettings && (
+        <div className="card p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-surface-200 flex items-center gap-2">
+              <Settings className="w-4 h-4 text-surface-400" /> Настройки интеграции НКЦКИ
+            </h3>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${settings.nkcki_enabled ? 'bg-emerald-500/15 text-emerald-400' : 'bg-surface-700 text-surface-500'}`}>
+                {settings.nkcki_enabled ? 'Включено' : 'Отключено'}
+              </span>
+            </div>
+          </div>
+
+          {settingsLoading ? (
+            <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-surface-500" /></div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-surface-400 mb-1">API URL</label>
+                  <input
+                    value={settingsForm.url}
+                    onChange={(e) => setSettingsForm((f) => ({ ...f, url: e.target.value }))}
+                    className="input text-sm"
+                    placeholder="https://lk.cert.gov.ru/api/v2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-surface-400 mb-1">
+                    API токен {settings.nkcki_api_token_set && <span className="text-emerald-400">(установлен: {settings.nkcki_api_token})</span>}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showToken ? 'text' : 'password'}
+                      value={settingsForm.token}
+                      onChange={(e) => setSettingsForm((f) => ({ ...f, token: e.target.value }))}
+                      className="input text-sm pr-10"
+                      placeholder={settings.nkcki_api_token_set ? 'Оставьте пустым, чтобы не менять' : 'Вставьте API токен'}
+                    />
+                    <button
+                      onClick={() => setShowToken(!showToken)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-surface-500 hover:text-surface-300"
+                    >
+                      {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm text-surface-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settingsForm.enabled}
+                    onChange={(e) => setSettingsForm((f) => ({ ...f, enabled: e.target.checked }))}
+                    className="rounded border-surface-600 bg-surface-800 text-brand-500"
+                  />
+                  Интеграция включена
+                </label>
+
+                <div className="flex items-center gap-2">
+                  {testResult && (
+                    <span className={`text-xs flex items-center gap-1 ${testResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {testResult.success ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                      {testResult.message}
+                    </span>
+                  )}
+                  <button onClick={testConnection} className="btn-secondary text-sm py-1.5">
+                    Тест подключения
+                  </button>
+                  <button onClick={saveSettings} disabled={settingsSaving} className="btn-primary text-sm py-1.5 flex items-center gap-1.5">
+                    {settingsSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Сохранить
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card p-3 flex items-center gap-3 flex-wrap">

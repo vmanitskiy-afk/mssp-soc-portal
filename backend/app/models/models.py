@@ -314,3 +314,15 @@ class Notification(Base):
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     extra_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# ── Portal Settings (key-value) ──────────────────────────────────
+
+class PortalSettings(Base):
+    """Global portal settings (key-value store)."""
+    __tablename__ = "portal_settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
