@@ -406,10 +406,11 @@ async def test_nkcki_connection(
 
     client = NKCKIClient(base_url=url, token=token, verify_ssl=False)
     try:
-        companies = await client.get_companies(limit=1)
+        # Try listing incidents (limit=1) as a connectivity test
+        await client.get_notifications(limit=1)
         return {
             "success": True,
-            "message": f"Подключение успешно. Доступно организаций: {len(companies)}",
+            "message": "Подключение успешно",
         }
     except NKCKIClientError as e:
         return {
